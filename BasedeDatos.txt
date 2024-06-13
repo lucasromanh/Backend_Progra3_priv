@@ -1,0 +1,801 @@
+-- Crear la base de datos
+CREATE DATABASE IF NOT EXISTS GestionColaborativa;
+USE GestionColaborativa;
+
+-- Crear la tabla Usuarios
+CREATE TABLE IF NOT EXISTS Usuarios (
+    UsuarioID INT AUTO_INCREMENT PRIMARY KEY,
+    Nombre VARCHAR(50) NOT NULL,
+    Apellido VARCHAR(50) NOT NULL,
+    CorreoElectronico VARCHAR(100) NOT NULL UNIQUE,
+    Telefono VARCHAR(15),
+    ImagenPerfil VARCHAR(255),
+    PasswordHash VARCHAR(64) NOT NULL
+);
+
+-- Crear la tabla PerfilesUsuario
+CREATE TABLE IF NOT EXISTS PerfilesUsuario (
+    PerfilID INT AUTO_INCREMENT PRIMARY KEY,
+    UsuarioID INT NOT NULL,
+    Editable BOOLEAN DEFAULT TRUE,
+    Biografia TEXT,
+    Intereses TEXT,
+    Ocupacion VARCHAR(100),
+    FOREIGN KEY (UsuarioID) REFERENCES Usuarios(UsuarioID)
+);
+
+-- Crear la tabla Invitaciones
+CREATE TABLE IF NOT EXISTS Invitaciones (
+    InvitacionID INT AUTO_INCREMENT PRIMARY KEY,
+    UsuarioOrigenID INT NOT NULL,
+    UsuarioDestinoID INT NOT NULL,
+    Estado ENUM('pendiente', 'aceptada', 'rechazada') DEFAULT 'pendiente',
+    FechaEnvio DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FechaAceptacion DATETIME,
+    FOREIGN KEY (UsuarioOrigenID) REFERENCES Usuarios(UsuarioID),
+    FOREIGN KEY (UsuarioDestinoID) REFERENCES Usuarios(UsuarioID)
+);
+
+-- Crear la tabla Boards
+CREATE TABLE IF NOT EXISTS Boards (
+    BoardID INT AUTO_INCREMENT PRIMARY KEY,
+    UsuarioPropietarioID INT NOT NULL,
+    Titulo VARCHAR(100) NOT NULL,
+    FOREIGN KEY (UsuarioPropietarioID) REFERENCES Usuarios(UsuarioID)
+);
+
+-- Crear la tabla Proyectos
+CREATE TABLE IF NOT EXISTS Proyectos (
+    ProyectoID INT AUTO_INCREMENT PRIMARY KEY,
+    BoardID INT NOT NULL,
+    Titulo VARCHAR(100) NOT NULL,
+    FOREIGN KEY (BoardID) REFERENCES Boards(BoardID)
+);
+
+-- Crear la tabla Tareas
+CREATE TABLE IF NOT EXISTS Tareas (
+    TareaID INT AUTO_INCREMENT PRIMARY KEY,
+    ProyectoID INT NOT NULL,
+    Titulo VARCHAR(100) NOT NULL,
+    Descripcion TEXT,
+    Importancia INT,
+    Estado ENUM('pendiente', 'en_proceso', 'completada') DEFAULT 'pendiente',
+    FechaVencimiento DATE,
+    FechaCreacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UltimaActualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (ProyectoID) REFERENCES Proyectos(ProyectoID)
+);
+
+-- Crear la tabla Columnas
+CREATE TABLE IF NOT EXISTS Columnas (
+    ColumnaID INT AUTO_INCREMENT PRIMARY KEY,
+    ColumnaNombre VARCHAR(100) NOT NULL,
+    ProyectoID INT NOT NULL,
+    FOREIGN KEY (ProyectoID) REFERENCES Proyectos(ProyectoID)
+);
+
+-- Crear la tabla Tareas_Columnas
+CREATE TABLE IF NOT EXISTS Tareas_Columnas (
+    TareaID INT NOT NULL,
+    ColumnaID INT NOT NULL,
+    Posicion INT NOT NULL,
+    PRIMARY KEY (TareaID, ColumnaID),
+    FOREIGN KEY (TareaID) REFERENCES Tareas(TareaID),
+    FOREIGN KEY (ColumnaID) REFERENCES Columnas(ColumnaID)
+);
+
+-- Crear la tabla AsignacionesTareas
+CREATE TABLE IF NOT EXISTS AsignacionesTareas (
+    AsignacionID INT AUTO_INCREMENT PRIMARY KEY,
+    TareaID INT NOT NULL,
+    UsuarioID INT NOT NULL,
+    FOREIGN KEY (TareaID) REFERENCES Tareas(TareaID),
+    FOREIGN KEY (UsuarioID) REFERENCES Usuarios(UsuarioID)
+);
+
+-- Crear la tabla AuditLogs
+CREATE TABLE IF NOT EXISTS AuditLogs (
+    LogID INT AUTO_INCREMENT PRIMARY KEY,
+    UsuarioID INT,
+    Accion VARCHAR(100) NOT NULL,
+    Detalles TEXT,
+    Fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (UsuarioID) REFERENCES Usuarios(UsuarioID)
+);
+
+-- Crear la tabla Notificaciones
+CREATE TABLE IF NOT EXISTS Notificaciones (
+    NotificacionID INT AUTO_INCREMENT PRIMARY KEY,
+    UsuarioID INT,
+    Mensaje VARCHAR(255) NOT NULL,
+    Fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
+    Leida BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (UsuarioID) REFERENCES Usuarios(UsuarioID)
+);
+
+-- Crear la tabla Comentarios
+CREATE TABLE IF NOT EXISTS Comentarios (
+    ComentarioID INT AUTO_INCREMENT PRIMARY KEY,
+    TareaID INT NOT NULL,
+    UsuarioID INT NOT NULL,
+    Texto TEXT NOT NULL,
+    Fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (TareaID) REFERENCES Tareas(TareaID),
+    FOREIGN KEY (UsuarioID) REFERENCES Usuarios(UsuarioID)
+);
+
+-- Crear la tabla Etiquetas
+CREATE TABLE IF NOT EXISTS Etiquetas (
+    EtiquetaID INT AUTO_INCREMENT PRIMARY KEY,
+    Nombre VARCHAR(50) NOT NULL
+);
+
+-- Crear la tabla Tareas_Etiquetas
+CREATE TABLE IF NOT EXISTS Tareas_Etiquetas (
+    TareaID INT NOT NULL,
+    EtiquetaID INT NOT NULL,
+    PRIMARY KEY (TareaID, EtiquetaID),
+    FOREIGN KEY (TareaID) REFERENCES Tareas(TareaID),
+    FOREIGN KEY (EtiquetaID) REFERENCES Etiquetas(EtiquetaID)
+);
+
+-- Crear la tabla Adjuntos
+CREATE TABLE IF NOT EXISTS Adjuntos (
+    AdjuntoID INT AUTO_INCREMENT PRIMARY KEY,
+    TareaID INT NOT NULL,
+    Archivo VARCHAR(255) NOT NULL,
+    Fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (TareaID) REFERENCES Tareas(TareaID)
+);
+
+
+Procedimientos Almacenados
+Procedimientos para la tabla Usuarios
+
+DELIMITER //
+
+-- Procedimiento para crear un usuario
+CREATE PROCEDURE CrearUsuario (
+    IN p_Nombre VARCHAR(50),
+    IN p_Apellido VARCHAR(50),
+    IN p_CorreoElectronico VARCHAR(100),
+    IN p_Telefono VARCHAR(15),
+    IN p_ImagenPerfil VARCHAR(255),
+    IN p_PasswordHash VARCHAR(64)
+)
+BEGIN
+    INSERT INTO Usuarios (Nombre, Apellido, CorreoElectronico, Telefono, ImagenPerfil, PasswordHash)
+    VALUES (p_Nombre, p_Apellido, p_CorreoElectronico, p_Telefono, p_ImagenPerfil, p_PasswordHash);
+END //
+
+-- Procedimiento para obtener todos los usuarios
+CREATE PROCEDURE ObtenerUsuarios()
+BEGIN
+    SELECT * FROM Usuarios;
+END //
+
+-- Procedimiento para obtener un usuario por ID
+CREATE PROCEDURE ObtenerUsuarioPorID(IN p_UsuarioID INT)
+BEGIN
+    SELECT * FROM Usuarios WHERE UsuarioID = p_UsuarioID;
+END //
+
+-- Procedimiento para actualizar un usuario
+CREATE PROCEDURE ActualizarUsuario (
+    IN p_UsuarioID INT,
+    IN p_Nombre VARCHAR(50),
+    IN p_Apellido VARCHAR(50),
+    IN p_CorreoElectronico VARCHAR(100),
+    IN p_Telefono VARCHAR(15),
+    IN p_ImagenPerfil VARCHAR(255),
+    IN p_PasswordHash VARCHAR(64)
+)
+BEGIN
+    UPDATE Usuarios
+    SET Nombre = p_Nombre,
+        Apellido = p_Apellido,
+        CorreoElectronico = p_CorreoElectronico,
+        Telefono = p_Telefono,
+        ImagenPerfil = p_ImagenPerfil,
+        PasswordHash = p_PasswordHash
+    WHERE UsuarioID = p_UsuarioID;
+END //
+
+-- Procedimiento para eliminar un usuario
+CREATE PROCEDURE EliminarUsuario(IN p_UsuarioID INT)
+BEGIN
+    DELETE FROM Usuarios WHERE UsuarioID = p_UsuarioID;
+END //
+
+DELIMITER ;
+
+
+Procedimientos para la tabla PerfilesUsuario
+
+DELIMITER //
+
+-- Procedimiento para crear un perfil
+CREATE PROCEDURE CrearPerfilUsuario (
+    IN p_UsuarioID INT,
+    IN p_Editable BOOLEAN,
+    IN p_Biografia TEXT,
+    IN p_Intereses TEXT,
+    IN p_Ocupacion VARCHAR(100)
+)
+BEGIN
+    INSERT INTO PerfilesUsuario (UsuarioID, Editable, Biografia, Intereses, Ocupacion)
+    VALUES (p_UsuarioID, p_Editable, p_Biografia, p_Intereses, p_Ocupacion);
+END //
+
+-- Procedimiento para obtener todos los perfiles
+CREATE PROCEDURE ObtenerPerfilesUsuario()
+BEGIN
+    SELECT * FROM PerfilesUsuario;
+END //
+
+-- Procedimiento para obtener un perfil por ID
+CREATE PROCEDURE ObtenerPerfilUsuarioPorID(IN p_PerfilID INT)
+BEGIN
+    SELECT * FROM PerfilesUsuario WHERE PerfilID = p_PerfilID;
+END //
+
+-- Procedimiento para actualizar un perfil
+CREATE PROCEDURE ActualizarPerfilUsuario (
+    IN p_PerfilID INT,
+    IN p_UsuarioID INT,
+    IN p_Editable BOOLEAN,
+    IN p_Biografia TEXT,
+    IN p_Intereses TEXT,
+    IN p_Ocupacion VARCHAR(100)
+)
+BEGIN
+    UPDATE PerfilesUsuario
+    SET UsuarioID = p_UsuarioID,
+        Editable = p_Editable,
+        Biografia = p_Biografia,
+        Intereses = p_Intereses,
+        Ocupacion = p_Ocupacion
+    WHERE PerfilID = p_PerfilID;
+END //
+
+-- Procedimiento para eliminar un perfil
+CREATE PROCEDURE EliminarPerfilUsuario(IN p_PerfilID INT)
+BEGIN
+    DELETE FROM PerfilesUsuario WHERE PerfilID = p_PerfilID;
+END //
+
+DELIMITER ;
+
+Procedimientos para la tabla Tareas
+
+DELIMITER //
+
+-- Procedimiento para crear una tarea
+CREATE PROCEDURE CrearTarea (
+    IN p_ProyectoID INT,
+    IN p_Titulo VARCHAR(100),
+    IN p_Descripcion TEXT,
+    IN p_Importancia INT,
+    IN p_Estado ENUM('pendiente', 'en_proceso', 'completada'),
+    IN p_FechaVencimiento DATE
+)
+BEGIN
+    INSERT INTO Tareas (ProyectoID, Titulo, Descripcion, Importancia, Estado, FechaVencimiento)
+    VALUES (p_ProyectoID, p_Titulo, p_Descripcion, p_Importancia, p_Estado, p_FechaVencimiento);
+END //
+
+-- Procedimiento para obtener todas las tareas
+CREATE PROCEDURE ObtenerTareas()
+BEGIN
+    SELECT * FROM Tareas;
+END //
+
+-- Procedimiento para obtener una tarea por ID
+CREATE PROCEDURE ObtenerTareaPorID(IN p_TareaID INT)
+BEGIN
+    SELECT * FROM Tareas WHERE TareaID = p_TareaID;
+END //
+
+-- Procedimiento para actualizar una tarea
+CREATE PROCEDURE ActualizarTarea (
+    IN p_TareaID INT,
+    IN p_ProyectoID INT,
+    IN p_Titulo VARCHAR(100),
+    IN p_Descripcion TEXT,
+    IN p_Importancia INT,
+    IN p_Estado ENUM('pendiente', 'en_proceso', 'completada'),
+    IN p_FechaVencimiento DATE
+)
+BEGIN
+    UPDATE Tareas
+    SET ProyectoID = p_ProyectoID,
+        Titulo = p_Titulo,
+        Descripcion = p_Descripcion,
+        Importancia = p_Importancia,
+        Estado = p_Estado,
+        FechaVencimiento = p_FechaVencimiento
+    WHERE TareaID = p_TareaID;
+END //
+
+-- Procedimiento para eliminar una tarea
+CREATE PROCEDURE EliminarTarea(IN p_TareaID INT)
+BEGIN
+    DELETE FROM Tareas WHERE TareaID = p_TareaID;
+END //
+
+DELIMITER ;
+
+
+Procedimientos para la tabla Comentarios
+
+DELIMITER //
+
+-- Procedimiento para crear un comentario
+CREATE PROCEDURE CrearComentario (
+    IN p_TareaID INT,
+    IN p_UsuarioID INT,
+    IN p_Texto TEXT
+)
+BEGIN
+    INSERT INTO Comentarios (TareaID, UsuarioID, Texto)
+    VALUES (p_TareaID, p_UsuarioID, p_Texto);
+END //
+
+-- Procedimiento para obtener todos los comentarios
+CREATE PROCEDURE ObtenerComentarios()
+BEGIN
+    SELECT * FROM Comentarios;
+END //
+
+-- Procedimiento para obtener un comentario por ID
+CREATE PROCEDURE ObtenerComentarioPorID(IN p_ComentarioID INT)
+BEGIN
+    SELECT * FROM Comentarios WHERE ComentarioID = p_ComentarioID;
+END //
+
+-- Procedimiento para actualizar un comentario
+CREATE PROCEDURE ActualizarComentario (
+    IN p_ComentarioID INT,
+    IN p_Texto TEXT
+)
+BEGIN
+    UPDATE Comentarios
+    SET Texto = p_Texto
+    WHERE ComentarioID = p_ComentarioID;
+END //
+
+-- Procedimiento para eliminar un comentario
+CREATE PROCEDURE EliminarComentario(IN p_ComentarioID INT)
+BEGIN
+    DELETE FROM Comentarios WHERE ComentarioID = p_ComentarioID;
+END //
+
+DELIMITER ;
+
+
+Procedimientos para la tabla Notificaciones
+
+DELIMITER //
+
+-- Procedimiento para crear una notificación
+CREATE PROCEDURE CrearNotificacion (
+    IN p_UsuarioID INT,
+    IN p_Mensaje VARCHAR(255),
+    IN p_Leida BOOLEAN
+)
+BEGIN
+    INSERT INTO Notificaciones (UsuarioID, Mensaje, Leida)
+    VALUES (p_UsuarioID, p_Mensaje, p_Leida);
+END //
+
+-- Procedimiento para obtener todas las notificaciones
+CREATE PROCEDURE ObtenerNotificaciones()
+BEGIN
+    SELECT * FROM Notificaciones;
+END //
+
+-- Procedimiento para obtener una notificación por ID
+CREATE PROCEDURE ObtenerNotificacionPorID(IN p_NotificacionID INT)
+BEGIN
+    SELECT * FROM Notificaciones WHERE NotificacionID = p_NotificacionID;
+END //
+
+-- Procedimiento para actualizar una notificación
+CREATE PROCEDURE ActualizarNotificacion (
+    IN p_NotificacionID INT,
+    IN p_Mensaje VARCHAR(255),
+    IN p_Leida BOOLEAN
+)
+BEGIN
+    UPDATE Notificaciones
+    SET Mensaje = p_Mensaje,
+        Leida = p_Leida
+    WHERE NotificacionID = p_NotificacionID;
+END //
+
+-- Procedimiento para eliminar una notificación
+CREATE PROCEDURE EliminarNotificacion(IN p_NotificacionID INT)
+BEGIN
+    DELETE FROM Notificaciones WHERE NotificacionID = p_NotificacionID;
+END //
+
+DELIMITER ;
+
+
+Procedimientos para la tabla Etiquetas
+
+DELIMITER //
+
+-- Procedimiento para crear una etiqueta
+CREATE PROCEDURE CrearEtiqueta (
+    IN p_Nombre VARCHAR(50)
+)
+BEGIN
+    INSERT INTO Etiquetas (Nombre)
+    VALUES (p_Nombre);
+END //
+
+-- Procedimiento para obtener todas las etiquetas
+CREATE PROCEDURE ObtenerEtiquetas()
+BEGIN
+    SELECT * FROM Etiquetas;
+END //
+
+-- Procedimiento para obtener una etiqueta por ID
+CREATE PROCEDURE ObtenerEtiquetaPorID(IN p_EtiquetaID INT)
+BEGIN
+    SELECT * FROM Etiquetas WHERE EtiquetaID = p_EtiquetaID;
+END //
+
+-- Procedimiento para actualizar una etiqueta
+CREATE PROCEDURE ActualizarEtiqueta (
+    IN p_EtiquetaID INT,
+    IN p_Nombre VARCHAR(50)
+)
+BEGIN
+    UPDATE Etiquetas
+    SET Nombre = p_Nombre
+    WHERE EtiquetaID = p_EtiquetaID;
+END //
+
+-- Procedimiento para eliminar una etiqueta
+CREATE PROCEDURE EliminarEtiqueta(IN p_EtiquetaID INT)
+BEGIN
+    DELETE FROM Etiquetas WHERE EtiquetaID = p_EtiquetaID;
+END //
+
+DELIMITER ;
+
+
+Procedimientos para la tabla Adjuntos
+
+DELIMITER //
+
+-- Procedimiento para crear un adjunto
+CREATE PROCEDURE CrearAdjunto (
+    IN p_TareaID INT,
+    IN p_Archivo VARCHAR(255)
+)
+BEGIN
+    INSERT INTO Adjuntos (TareaID, Archivo)
+    VALUES (p_TareaID, p_Archivo);
+END //
+
+-- Procedimiento para obtener todos los adjuntos
+CREATE PROCEDURE ObtenerAdjuntos()
+BEGIN
+    SELECT * FROM Adjuntos;
+END //
+
+-- Procedimiento para obtener un adjunto por ID
+CREATE PROCEDURE ObtenerAdjuntoPorID(IN p_AdjuntoID INT)
+BEGIN
+    SELECT * FROM Adjuntos WHERE AdjuntoID = p_AdjuntoID;
+END //
+
+-- Procedimiento para eliminar un adjunto
+CREATE PROCEDURE EliminarAdjunto(IN p_AdjuntoID INT)
+BEGIN
+    DELETE FROM Adjuntos WHERE AdjuntoID = p_AdjuntoID;
+END //
+
+DELIMITER ;
+
+
+
+
+
+Procedimientos para otras tablas
+Procedimientos para la tabla Boards
+
+DELIMITER //
+
+-- Procedimiento para crear un board
+CREATE PROCEDURE CrearBoard (
+    IN p_UsuarioPropietarioID INT,
+    IN p_Titulo VARCHAR(100)
+)
+BEGIN
+    INSERT INTO Boards (UsuarioPropietarioID, Titulo)
+    VALUES (p_UsuarioPropietarioID, p_Titulo);
+END //
+
+-- Procedimiento para obtener todos los boards
+CREATE PROCEDURE ObtenerBoards()
+BEGIN
+    SELECT * FROM Boards;
+END //
+
+-- Procedimiento para obtener un board por ID
+CREATE PROCEDURE ObtenerBoardPorID(IN p_BoardID INT)
+BEGIN
+    SELECT * FROM Boards WHERE BoardID = p_BoardID;
+END //
+
+-- Procedimiento para actualizar un board
+CREATE PROCEDURE ActualizarBoard (
+    IN p_BoardID INT,
+    IN p_UsuarioPropietarioID INT,
+    IN p_Titulo VARCHAR(100)
+)
+BEGIN
+    UPDATE Boards
+    SET UsuarioPropietarioID = p_UsuarioPropietarioID,
+        Titulo = p_Titulo
+    WHERE BoardID = p_BoardID;
+END //
+
+-- Procedimiento para eliminar un board
+CREATE PROCEDURE EliminarBoard(IN p_BoardID INT)
+BEGIN
+    DELETE FROM Boards WHERE BoardID = p_BoardID;
+END //
+
+DELIMITER ;
+
+
+Procedimientos para la tabla Proyectos
+
+DELIMITER //
+
+-- Procedimiento para crear un proyecto
+CREATE PROCEDURE CrearProyecto (
+    IN p_BoardID INT,
+    IN p_Titulo VARCHAR(100)
+)
+BEGIN
+    INSERT INTO Proyectos (BoardID, Titulo)
+    VALUES (p_BoardID, p_Titulo);
+END //
+
+-- Procedimiento para obtener todos los proyectos
+CREATE PROCEDURE ObtenerProyectos()
+BEGIN
+    SELECT * FROM Proyectos;
+END //
+
+-- Procedimiento para obtener un proyecto por ID
+CREATE PROCEDURE ObtenerProyectoPorID(IN p_ProyectoID INT)
+BEGIN
+    SELECT * FROM Proyectos WHERE ProyectoID = p_ProyectoID;
+END //
+
+-- Procedimiento para actualizar un proyecto
+CREATE PROCEDURE ActualizarProyecto (
+    IN p_ProyectoID INT,
+    IN p_BoardID INT,
+    IN p_Titulo VARCHAR(100)
+)
+BEGIN
+    UPDATE Proyectos
+    SET BoardID = p_BoardID,
+        Titulo = p_Titulo
+    WHERE ProyectoID = p_ProyectoID;
+END //
+
+-- Procedimiento para eliminar un proyecto
+CREATE PROCEDURE EliminarProyecto(IN p_ProyectoID INT)
+BEGIN
+    DELETE FROM Proyectos WHERE ProyectoID = p_ProyectoID;
+END //
+
+DELIMITER ;
+
+
+Procedimientos para la tabla Columnas
+
+DELIMITER //
+
+-- Procedimiento para crear una columna
+CREATE PROCEDURE CrearColumna (
+    IN p_ProyectoID INT,
+    IN p_ColumnaNombre VARCHAR(100)
+)
+BEGIN
+    INSERT INTO Columnas (ProyectoID, ColumnaNombre)
+    VALUES (p_ProyectoID, p_ColumnaNombre);
+END //
+
+-- Procedimiento para obtener todas las columnas
+CREATE PROCEDURE ObtenerColumnas()
+BEGIN
+    SELECT * FROM Columnas;
+END //
+
+-- Procedimiento para obtener una columna por ID
+CREATE PROCEDURE ObtenerColumnaPorID(IN p_ColumnaID INT)
+BEGIN
+    SELECT * FROM Columnas WHERE ColumnaID = p_ColumnaID;
+END //
+
+-- Procedimiento para actualizar una columna
+CREATE PROCEDURE ActualizarColumna (
+    IN p_ColumnaID INT,
+    IN p_ProyectoID INT,
+    IN p_ColumnaNombre VARCHAR(100)
+)
+BEGIN
+    UPDATE Columnas
+    SET ProyectoID = p_ProyectoID,
+        ColumnaNombre = p_ColumnaNombre
+    WHERE ColumnaID = p_ColumnaID;
+END //
+
+-- Procedimiento para eliminar una columna
+CREATE PROCEDURE EliminarColumna(IN p_ColumnaID INT)
+BEGIN
+    DELETE FROM Columnas WHERE ColumnaID = p_ColumnaID;
+END //
+
+DELIMITER ;
+
+
+Procedimientos para la tabla Tareas_Columnas
+
+DELIMITER //
+
+-- Procedimiento para crear una relación tarea-columna
+CREATE PROCEDURE CrearTareaColumna (
+    IN p_TareaID INT,
+    IN p_ColumnaID INT,
+    IN p_Posicion INT
+)
+BEGIN
+    INSERT INTO Tareas_Columnas (TareaID, ColumnaID, Posicion)
+    VALUES (p_TareaID, p_ColumnaID, p_Posicion);
+END //
+
+-- Procedimiento para obtener todas las relaciones tarea-columna
+CREATE PROCEDURE ObtenerTareasColumnas()
+BEGIN
+    SELECT * FROM Tareas_Columnas;
+END //
+
+-- Procedimiento para obtener una relación tarea-columna por IDs
+CREATE PROCEDURE ObtenerTareaColumnaPorID(IN p_TareaID INT, IN p_ColumnaID INT)
+BEGIN
+    SELECT * FROM Tareas_Columnas WHERE TareaID = p_TareaID AND ColumnaID = p_ColumnaID;
+END //
+
+-- Procedimiento para actualizar una relación tarea-columna
+CREATE PROCEDURE ActualizarTareaColumna (
+    IN p_TareaID INT,
+    IN p_ColumnaID INT,
+    IN p_Posicion INT
+)
+BEGIN
+    UPDATE Tareas_Columnas
+    SET Posicion = p_Posicion
+    WHERE TareaID = p_TareaID AND ColumnaID = p_ColumnaID;
+END //
+
+-- Procedimiento para eliminar una relación tarea-columna
+CREATE PROCEDURE EliminarTareaColumna(IN p_TareaID INT, IN p_ColumnaID INT)
+BEGIN
+    DELETE FROM Tareas_Columnas WHERE TareaID = p_TareaID AND ColumnaID = p_ColumnaID;
+END //
+
+DELIMITER ;
+
+
+Procedimientos para la tabla AsignacionesTareas
+
+DELIMITER //
+
+-- Procedimiento para crear una asignación de tarea
+CREATE PROCEDURE CrearAsignacionTarea (
+    IN p_TareaID INT,
+    IN p_UsuarioID INT
+)
+BEGIN
+    INSERT INTO AsignacionesTareas (TareaID, UsuarioID)
+    VALUES (p_TareaID, p_UsuarioID);
+END //
+
+-- Procedimiento para obtener todas las asignaciones de tarea
+CREATE PROCEDURE ObtenerAsignacionesTareas()
+BEGIN
+    SELECT * FROM AsignacionesTareas;
+END //
+
+-- Procedimiento para obtener una asignación de tarea por ID
+CREATE PROCEDURE ObtenerAsignacionTareaPorID(IN p_AsignacionID INT)
+BEGIN
+    SELECT * FROM AsignacionesTareas WHERE AsignacionID = p_AsignacionID;
+END //
+
+-- Procedimiento para actualizar una asignación de tarea
+CREATE PROCEDURE ActualizarAsignacionTarea (
+    IN p_AsignacionID INT,
+    IN p_TareaID INT,
+    IN p_UsuarioID INT
+)
+BEGIN
+    UPDATE AsignacionesTareas
+    SET TareaID = p_TareaID,
+        UsuarioID = p_UsuarioID
+    WHERE AsignacionID = p_AsignacionID;
+END //
+
+-- Procedimiento para eliminar una asignación de tarea
+CREATE PROCEDURE EliminarAsignacionTarea(IN p_AsignacionID INT)
+BEGIN
+    DELETE FROM AsignacionesTareas WHERE AsignacionID = p_AsignacionID;
+END //
+
+DELIMITER ;
+
+Procedimientos para la tabla AuditLogs
+
+DELIMITER //
+
+-- Procedimiento para crear un log de auditoría
+CREATE PROCEDURE CrearAuditLog (
+    IN p_UsuarioID INT,
+    IN p_Accion VARCHAR(100),
+    IN p_Detalles TEXT
+)
+BEGIN
+    INSERT INTO AuditLogs (UsuarioID, Accion, Detalles)
+    VALUES (p_UsuarioID, p_Accion, p_Detalles);
+END //
+
+-- Procedimiento para obtener todos los logs de auditoría
+CREATE PROCEDURE ObtenerAuditLogs()
+BEGIN
+    SELECT * FROM AuditLogs;
+END //
+
+-- Procedimiento para obtener un log de auditoría por ID
+CREATE PROCEDURE ObtenerAuditLogPorID(IN p_LogID INT)
+BEGIN
+    SELECT * FROM AuditLogs WHERE LogID = p_LogID;
+END //
+
+-- Procedimiento para actualizar un log de auditoría
+CREATE PROCEDURE ActualizarAuditLog (
+    IN p_LogID INT,
+    IN p_UsuarioID INT,
+    IN p_Accion VARCHAR(100),
+    IN p_Detalles TEXT
+)
+BEGIN
+    UPDATE AuditLogs
+    SET UsuarioID = p_UsuarioID,
+        Accion = p_Accion,
+        Detalles = p_Detalles
+    WHERE LogID = p_LogID;
+END //
+
+-- Procedimiento para eliminar un log de auditoría
+CREATE PROCEDURE EliminarAuditLog(IN p_LogID INT)
+BEGIN
+    DELETE FROM AuditLogs WHERE LogID = p_LogID;
+END //
+
+DELIMITER ;
+
+
+
+
+

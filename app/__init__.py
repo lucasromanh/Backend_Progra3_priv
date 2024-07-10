@@ -16,10 +16,13 @@ def create_app(config_class='config.DevelopmentConfig'):
     db.init_app(app)
     migrate.init_app(app, db)
     socketio.init_app(app)
-    CORS(app)
+
+    # Configuración CORS
+    CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
 
     Swagger(app)
 
+    from .routes.auth import auth_bp
     from .routes.usuarios import usuarios_bp
     from .routes.perfiles import perfiles_bp
     from .routes.tareas import tareas_bp
@@ -28,6 +31,7 @@ def create_app(config_class='config.DevelopmentConfig'):
     from .routes.etiquetas import etiquetas_bp
     from .routes.adjuntos import adjuntos_bp
 
+    app.register_blueprint(auth_bp, url_prefix='/api')
     app.register_blueprint(usuarios_bp, url_prefix='/api')
     app.register_blueprint(perfiles_bp, url_prefix='/api')
     app.register_blueprint(tareas_bp, url_prefix='/api')

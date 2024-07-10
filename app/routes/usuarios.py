@@ -1,10 +1,16 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app as app
+from flask_cors import CORS
+from werkzeug.security import generate_password_hash
+from app.models import db, Usuario
 from ..utils import call_procedure
 from app.routes.auth import token_required
 from ..schemas import UsuarioSchema
-from ..utils import generate_password_hash
+from ..constants import USER_NOT_FOUND
+import jwt
+import datetime
 
 usuarios_bp = Blueprint('usuarios', __name__)
+CORS(usuarios_bp)  
 
 usuario_schema = UsuarioSchema()
 usuarios_schema = UsuarioSchema(many=True)
@@ -52,7 +58,7 @@ def get_usuario(id):
     """
     result = call_procedure('ObtenerUsuarioPorID', [id])
     if not result:
-        return jsonify({'message': 'User not found'}), 404
+        return jsonify({'message': USER_NOT_FOUND}), 404
     return jsonify(result[0]), 200
 
 @usuarios_bp.route('/usuarios', methods=['POST'])
@@ -85,23 +91,40 @@ def create_usuario():
       201:
         description: User created successfully
         schema:
-          $ref: '#/definitions/Usuario'
+          properties:
+            message:
+              type: string
+            token:
+              type: string
       400:
         description: Invalid input
     """
     data = request.get_json()
+    if not data:
+        return jsonify({'message': 'No input data provided'}), 400
+
+    required_fields = ['Nombre', 'Apellido', 'CorreoElectronico', 'Password']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({'message': f'{field} is required'}), 400
+
     errors = usuario_schema.validate(data)
     if errors:
         return jsonify(errors), 400
-    call_procedure('CrearUsuario', [
-        data['Nombre'],
-        data['Apellido'],
-        data['CorreoElectronico'],
-        data.get('Telefono', ''),
-        data.get('ImagenPerfil', ''),
-        generate_password_hash(data['Password'])
-    ])
-    return jsonify({'message': 'User created successfully'}), 201
+
+    new_user = Usuario(
+        Nombre=data['Nombre'],
+        Apellido=data['Apellido'],
+        CorreoElectronico=data['CorreoElectronico'],
+        PasswordHash=generate_password_hash(data['Password'])
+    )
+
+    db.session.add(new_user)
+    db.session.commit()
+
+    token = jwt.encode({'UsuarioID': new_user.UsuarioID, 'exp': datetime.datetime.now() + datetime.timedelta(minutes=30)}, app.config['SECRET_KEY'], algorithm="HS256")
+    
+    return jsonify({'message': 'User created successfully', 'token': token}), 201
 
 @usuarios_bp.route('/usuarios/<int:id>', methods=['PUT'])
 @token_required

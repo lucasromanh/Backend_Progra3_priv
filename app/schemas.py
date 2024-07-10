@@ -1,4 +1,6 @@
-from marshmallow import Schema, fields, validate
+from marshmallow import Schema, fields, validate, post_load, validates, ValidationError
+from .models import Tarea
+
 
 class UsuarioSchema(Schema):
     UsuarioID = fields.Int(dump_only=True)
@@ -8,6 +10,8 @@ class UsuarioSchema(Schema):
     Telefono = fields.Str(validate=validate.Length(max=15))
     ImagenPerfil = fields.Str(validate=validate.Length(max=255))
     PasswordHash = fields.Str(load_only=True, required=True, validate=validate.Length(min=6))
+    defaultBoardId = fields.Int(dump_only=True)  
+
 
 class PerfilUsuarioSchema(Schema):
     PerfilID = fields.Int(dump_only=True)
@@ -46,6 +50,15 @@ class TareaSchema(Schema):
     FechaCreacion = fields.DateTime(dump_only=True)
     UltimaActualizacion = fields.DateTime(dump_only=True)
 
+    @validates('ProyectoID')
+    def validate_proyecto_id(self, value):
+        if not isinstance(value, int):
+            raise ValidationError('ProyectoID must be a valid integer.')
+
+    @post_load
+    def create_tarea(self, data, **kwargs):
+        return Tarea(**data)
+
 class ColumnaSchema(Schema):
     ColumnaID = fields.Int(dump_only=True)
     ProyectoID = fields.Int(required=True)
@@ -76,7 +89,7 @@ class ComentarioSchema(Schema):
     UsuarioID = fields.Int(required=True)
     Texto = fields.Str(required=True, validate=validate.Length(min=1))
     Fecha = fields.DateTime(dump_only=True)
-    
+
 class EtiquetaSchema(Schema):
     EtiquetaID = fields.Int(dump_only=True)
     Nombre = fields.Str(required=True, validate=validate.Length(min=1, max=50))
@@ -91,4 +104,20 @@ class AdjuntoSchema(Schema):
     Archivo = fields.Str(required=True, validate=validate.Length(max=255))
     Fecha = fields.DateTime(dump_only=True)
 
+# Nuevos esquemas
+class MiembroSchema(Schema):
+    UsuarioID = fields.Int(required=True)
+    TareaID = fields.Int(required=True)
 
+class ChecklistSchema(Schema):
+    id = fields.Int(dump_only=True)
+    Titulo = fields.Str(required=True, validate=validate.Length(min=1, max=100))
+
+class FechaSchema(Schema):
+    id = fields.Int(dump_only=True)
+    FechaVencimiento = fields.Date(required=True)
+
+class PortadaSchema(Schema):
+    id = fields.Int(dump_only=True)
+    TareaID = fields.Int(required=True)
+    PortadaID = fields.Int(required=True)

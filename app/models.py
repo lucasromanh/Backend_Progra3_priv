@@ -11,7 +11,12 @@ class Usuario(db.Model):
     CorreoElectronico = db.Column(db.String(100), unique=True, nullable=False)
     Telefono = db.Column(db.String(15))
     ImagenPerfil = db.Column(db.String(255))
-    PasswordHash = db.Column(db.String(64), nullable=False)
+    PasswordHash = db.Column(db.String(255), nullable=False)
+    defaultBoardId = db.Column(db.Integer, db.ForeignKey('Boards.BoardID'), nullable=True)
+    
+    # Agrega esta relación para resolver la ambigüedad
+    default_board = db.relationship("Board", foreign_keys=[defaultBoardId], backref="usuarios")
+
 
 class PerfilUsuario(db.Model):
     __tablename__ = 'PerfilesUsuario'
@@ -34,8 +39,11 @@ class Invitacion(db.Model):
 class Board(db.Model):
     __tablename__ = 'Boards'
     BoardID = db.Column(db.Integer, primary_key=True)
-    UsuarioPropietarioID = db.Column(db.Integer, db.ForeignKey(USUARIO_ID), nullable=False)
+    UsuarioPropietarioID = db.Column(db.Integer, db.ForeignKey('Usuarios.UsuarioID'), nullable=False)
     Titulo = db.Column(db.String(100), nullable=False)
+
+    # Agrega esta relación para resolver la ambigüedad
+    propietario = db.relationship("Usuario", foreign_keys=[UsuarioPropietarioID], backref="boards")
 
 class Proyecto(db.Model):
     __tablename__ = 'Proyectos'
@@ -112,4 +120,11 @@ class Adjunto(db.Model):
     AdjuntoID = db.Column(db.Integer, primary_key=True)
     TareaID = db.Column(db.Integer, db.ForeignKey(TAREA_ID))
     Archivo = db.Column(db.String(255), nullable=False)
+    Fecha = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+class Portada(db.Model):
+    __tablename__ = 'Portadas'
+    PortadaID = db.Column(db.Integer, primary_key=True)
+    TareaID = db.Column(db.Integer, db.ForeignKey(TAREA_ID))
+    Imagen = db.Column(db.String(255), nullable=False)
     Fecha = db.Column(db.DateTime, default=db.func.current_timestamp())

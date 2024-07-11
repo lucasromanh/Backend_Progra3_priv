@@ -76,7 +76,12 @@ def login():
 
     if check_password_hash(user.PasswordHash, data['Password']):
         token = jwt.encode({'UsuarioID': user.UsuarioID, 'exp': datetime.datetime.now() + datetime.timedelta(minutes=30)}, app.config['SECRET_KEY'], algorithm="HS256")
-        return jsonify({'token': token, 'user': {'UsuarioID': user.UsuarioID, 'defaultBoardId': user.defaultBoardId}})
+        user_data = {
+            'UsuarioID': user.UsuarioID,
+            'defaultBoardId': user.defaultBoardId
+        }
+        app.logger.info(f"User data to be sent: {user_data}")
+        return jsonify({'token': token, 'user': user_data})
 
     return jsonify({'message': 'Password is incorrect'}), 403
 

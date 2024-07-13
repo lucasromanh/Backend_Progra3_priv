@@ -159,3 +159,30 @@ def logout(current_user):
         description: Logout successful
     """
     return jsonify({'message': 'Logout successful'}), 200
+
+@auth_bp.route('/refresh-token', methods=['POST'])
+@token_required
+def refresh_token(current_user):
+    """
+    Refresh Token
+    ---
+    tags:
+      - auth
+    responses:
+      200:
+        description: Token refreshed successfully
+        schema:
+          id: RefreshTokenResponse
+          properties:
+            token:
+              type: string
+              description: New JWT token
+      403:
+        description: Token is missing or invalid
+    """
+    try:
+        new_token = jwt.encode({'UsuarioID': current_user.UsuarioID, 'exp': datetime.datetime.now() + datetime.timedelta(minutes=30)}, app.config['SECRET_KEY'], algorithm="HS256")
+        return jsonify({'token': new_token})
+    except Exception as e:
+        app.logger.error(f"Error refreshing token: {e}")
+        return jsonify({'message': 'Error refreshing token', 'error': str(e)}), 500

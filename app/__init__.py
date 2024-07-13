@@ -18,7 +18,7 @@ def create_app(config_class='config.DevelopmentConfig'):
     socketio.init_app(app)
 
     # Configuración CORS
-    CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
+    CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
     Swagger(app)
 

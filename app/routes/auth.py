@@ -75,7 +75,7 @@ def login():
         return jsonify({'message': 'User not found'}), 401
 
     if check_password_hash(user.PasswordHash, data['Password']):
-        token = jwt.encode({'UsuarioID': user.UsuarioID, 'exp': datetime.datetime.now() + datetime.timedelta(minutes=30)}, app.config['SECRET_KEY'], algorithm="HS256")
+        token = jwt.encode({'UsuarioID': user.UsuarioID, 'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=30)}, app.config['SECRET_KEY'], algorithm="HS256")
         user_data = {
             'UsuarioID': user.UsuarioID,
             'defaultBoardId': user.defaultBoardId
@@ -180,9 +180,5 @@ def refresh_token(current_user):
       403:
         description: Token is missing or invalid
     """
-    try:
-        new_token = jwt.encode({'UsuarioID': current_user.UsuarioID, 'exp': datetime.datetime.now() + datetime.timedelta(minutes=30)}, app.config['SECRET_KEY'], algorithm="HS256")
-        return jsonify({'token': new_token})
-    except Exception as e:
-        app.logger.error(f"Error refreshing token: {e}")
-        return jsonify({'message': 'Error refreshing token', 'error': str(e)}), 500
+    token = jwt.encode({'UsuarioID': current_user.UsuarioID, 'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)}, app.config['SECRET_KEY'], algorithm="HS256")
+    return jsonify({'token': token})

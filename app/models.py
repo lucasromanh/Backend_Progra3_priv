@@ -13,8 +13,6 @@ class Usuario(db.Model):
     ImagenPerfil = db.Column(db.String(255))
     PasswordHash = db.Column(db.String(255), nullable=False)
     defaultBoardId = db.Column(db.Integer, db.ForeignKey('Boards.BoardID'), nullable=True)
-    
-    # Agrega esta relación para resolver la ambigüedad
     default_board = db.relationship("Board", foreign_keys=[defaultBoardId], backref="usuarios")
 
 

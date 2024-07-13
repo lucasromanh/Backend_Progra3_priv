@@ -1,10 +1,12 @@
 from flask import Blueprint, request, jsonify
 from flask_socketio import emit
+from app.models import db, Tarea
 from ..utils import call_procedure
 from app.routes.auth import token_required
 from ..schemas import TareaSchema, MiembroSchema, EtiquetaSchema, ChecklistSchema, FechaSchema, AdjuntoSchema, PortadaSchema
 from .. import socketio
 from ..constants import TASK_NOT_FOUND
+from marshmallow import ValidationError
 
 tareas_bp = Blueprint('tareas', __name__)
 
@@ -114,7 +116,7 @@ def create_tarea(current_user):
         data.get('Estado', 'pendiente'),
         data.get('FechaVencimiento', None)
     ])
-    emit('new_task', {'task': data}, broadcast=True)
+    socketio.emit('new_task', {'task': data}, namespace='/')
     return jsonify({'message': 'Task created successfully'}), 201
 
 @tareas_bp.route('/tareas/<id>', methods=['PUT'])
@@ -160,29 +162,26 @@ def update_tarea(current_user, id):
       404:
         description: Task not found
     """
+    tarea = Tarea.query.get_or_404(id)
     data = request.get_json()
-    print("Datos recibidos para actualización:", data)  
-    errors = tarea_schema.validate(data)
-    if errors:
-        print(errors) 
-        return jsonify(errors), 400
 
-    result = call_procedure('ObtenerTareaPorID', [id])
-    if not result:
-        return jsonify({'message': TASK_NOT_FOUND}), 404
+    print("Datos recibidos para actualización:", data)  # Debugging
 
-    call_procedure('ActualizarTarea', [
-        id,
-        data['ProyectoID'],
-        data['Titulo'],
-        data.get('Descripcion', ''),
-        data.get('Importancia', 1),
-        data.get('Estado', 'pendiente'),
-        data.get('FechaVencimiento', None)
-    ])
+    try:
+        validated_data = tarea_schema.load(data)
+    except ValidationError as err:
+        print("Errores de validación:", err.messages)  # Debugging
+        return jsonify(err.messages), 400
 
-    emit('update_task', {'task': data}, broadcast=True)
-    return jsonify({'message': 'Task updated successfully'}), 200
+    tarea.Titulo = validated_data.get('Titulo', tarea.Titulo)
+    tarea.Descripcion = validated_data.get('Descripcion', tarea.Descripcion)
+    tarea.ProyectoID = validated_data.get('ProyectoID', tarea.ProyectoID)
+    tarea.FechaVencimiento = validated_data.get('FechaVencimiento', tarea.FechaVencimiento)
+    tarea.Importancia = validated_data.get('Importancia', tarea.Importancia)
+    tarea.Estado = validated_data.get('Estado', tarea.Estado)
+
+    db.session.commit()
+    return tarea_schema.jsonify(tarea)
 
 @tareas_bp.route('/tareas/<id>', methods=['DELETE'])
 @token_required
@@ -208,7 +207,7 @@ def delete_tarea(current_user, id):
     if not result:
         return jsonify({'message': TASK_NOT_FOUND}), 404
     call_procedure('EliminarTarea', [id])
-    emit('delete_task', {'task_id': id}, broadcast=True)
+    socketio.emit('delete_task', {'task_id': id}, namespace='/')
     return '', 204
 
 # Nuevas rutas

@@ -85,7 +85,6 @@ def login():
 
     return jsonify({'message': 'Password is incorrect'}), 403
 
-
 @auth_bp.route('/register', methods=['POST'])
 def register():
     """
@@ -144,7 +143,6 @@ def register():
     db.session.commit()
 
     return jsonify({'message': 'User registered successfully'}), 201
-
 
 @auth_bp.route('/logout', methods=['POST'])
 @token_required

@@ -1,7 +1,8 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app as app
 from flask_socketio import emit
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models import db, Tarea
-from ..utils import call_procedure
+from ..utils import call_procedure, obtener_todas_las_tareas, obtener_tarea_por_id
 from app.routes.auth import token_required
 from ..schemas import TareaSchema, MiembroSchema, EtiquetaSchema, ChecklistSchema, FechaSchema, AdjuntoSchema, PortadaSchema
 from .. import socketio
@@ -35,10 +36,25 @@ def get_tareas(current_user):
           items:
             $ref: '#/definitions/Tarea'
     """
-    result = call_procedure('ObtenerTareas', [])
-    return jsonify(result), 200
-
-@tareas_bp.route('/tareas/<id>', methods=['GET'])
+    tasks = obtener_todas_las_tareas()
+    if not tasks:
+        return jsonify({'message': 'No tasks found'}), 404
+    
+    formatted_tasks = []
+    for task in tasks:
+        formatted_tasks.append({
+            "id": task['TareaID'],
+            "board_id": task['ProyectoID'],
+            "title": task['Titulo'],
+            "description": task['Descripcion'],
+            "status": task['Estado'],
+            "due_date": task['FechaVencimiento'].isoformat() if task['FechaVencimiento'] else None,
+            "created_at": task['FechaCreacion'].isoformat() if task['FechaCreacion'] else None,
+            "updated_at": task['UltimaActualizacion'].isoformat() if task['UltimaActualizacion'] else None
+        })
+    return jsonify(formatted_tasks), 200
+  
+@tareas_bp.route('/tareas/<int:id>', methods=['GET'])
 @token_required
 def get_tarea(current_user, id):
     """
@@ -60,10 +76,22 @@ def get_tarea(current_user, id):
       404:
         description: Task not found
     """
-    result = call_procedure('ObtenerTareaPorID', [id])
-    if not result:
+    task = obtener_tarea_por_id(id)
+    if not task:
         return jsonify({'message': TASK_NOT_FOUND}), 404
-    return jsonify(result[0]), 200
+    
+    task = task[0]  # Since obtener_tarea_por_id returns a list of one element
+    formatted_task = {
+        "id": task['TareaID'],
+        "board_id": task['ProyectoID'],
+        "title": task['Titulo'],
+        "description": task['Descripcion'],
+        "status": task['Estado'],
+        "due_date": task['FechaVencimiento'].isoformat() if task['FechaVencimiento'] else None,
+        "created_at": task['FechaCreacion'].isoformat() if task['FechaCreacion'] else None,
+        "updated_at": task['UltimaActualizacion'].isoformat() if task['UltimaActualizacion'] else None
+    }
+    return jsonify(formatted_task), 200
 
 @tareas_bp.route('/tareas', methods=['POST'])
 @token_required
@@ -105,21 +133,40 @@ def create_tarea(current_user):
         description: Invalid input
     """
     data = request.get_json()
+    app.logger.info(f"User creating task: {current_user.UsuarioID}")
+    app.logger.info(f"Data received: {data}")  # Imprimir datos recibidos
+
     errors = tarea_schema.validate(data)
     if errors:
+        app.logger.error(f"Validation errors: {errors}")  # Imprimir errores de validación
         return jsonify(errors), 400
-    call_procedure('CrearTarea', [
-        data['ProyectoID'],
-        data['Titulo'],
-        data.get('Descripcion', ''),
-        data.get('Importancia', 1),
-        data.get('Estado', 'pendiente'),
-        data.get('FechaVencimiento', None)
-    ])
-    socketio.emit('new_task', {'task': data}, namespace='/')
-    return jsonify({'message': 'Task created successfully'}), 201
+    try:
+        result = call_procedure('CrearTarea', [
+            data['ProyectoID'],
+            data['Titulo'],
+            data.get('Descripcion', ''),
+            data.get('Importancia', 1),
+            data.get('Estado', 'pendiente'),
+            data.get('FechaVencimiento', None)
+        ])
+        app.logger.info(f"Result from CrearTarea: {result}")  # Log del resultado
+        new_task_id = result[0][0]
+        new_task = {
+            'id': new_task_id,
+            'ProyectoID': data['ProyectoID'],
+            'Titulo': data['Titulo'],
+            'Descripcion': data.get('Descripcion', ''),
+            'Importancia': data.get('Importancia', 1),
+            'Estado': data.get('Estado', 'pendiente'),
+            'FechaVencimiento': data.get('FechaVencimiento', None)
+        }
+        socketio.emit('new_task', {'task': new_task}, namespace='/')
+        return jsonify({'message': 'Task created successfully', 'task': new_task}), 201
+    except Exception as e:
+        app.logger.error(f"Error creating task: {e}")  # Log del error
+        return jsonify({'message': 'Internal server error'}), 500
 
-@tareas_bp.route('/tareas/<id>', methods=['PUT'])
+@tareas_bp.route('/tareas/<int:id>', methods=['PUT'])
 @token_required
 def update_tarea(current_user, id):
     """
@@ -130,7 +177,7 @@ def update_tarea(current_user, id):
     parameters:
       - in: path
         name: id
-        type: string
+        type: integer
         required: true
         description: ID of the task
       - in: body
@@ -162,26 +209,53 @@ def update_tarea(current_user, id):
       404:
         description: Task not found
     """
-    tarea = Tarea.query.get_or_404(id)
     data = request.get_json()
+    app.logger.info(f"Datos recibidos para actualización: {data}")
 
-    print("Datos recibidos para actualización:", data)  # Debugging
+    # Eliminar campos no deseados antes de la validación
+    data.pop('id', None)
+    data.pop('columnId', None)
+    data.pop('message', None)
 
+    # Validar datos
     try:
-        validated_data = tarea_schema.load(data)
+        tarea_data = tarea_schema.load(data, partial=True)
+        tarea_data_dict = tarea_schema.dump(tarea_data)
+        app.logger.info(f"Datos validados: {tarea_data_dict}")
     except ValidationError as err:
-        print("Errores de validación:", err.messages)  # Debugging
+        app.logger.error(f"Errores de validación: {err.messages}")
         return jsonify(err.messages), 400
 
-    tarea.Titulo = validated_data.get('Titulo', tarea.Titulo)
-    tarea.Descripcion = validated_data.get('Descripcion', tarea.Descripcion)
-    tarea.ProyectoID = validated_data.get('ProyectoID', tarea.ProyectoID)
-    tarea.FechaVencimiento = validated_data.get('FechaVencimiento', tarea.FechaVencimiento)
-    tarea.Importancia = validated_data.get('Importancia', tarea.Importancia)
-    tarea.Estado = validated_data.get('Estado', tarea.Estado)
+    # Convertir el id a entero
+    try:
+        tarea_id = int(id)
+    except ValueError:
+        app.logger.error(f"ID de tarea inválido: {id}")
+        return jsonify({'message': 'Invalid task ID'}), 400
 
-    db.session.commit()
-    return tarea_schema.jsonify(tarea)
+    # Verificar si la tarea existe
+    result = call_procedure('ObtenerTareaPorID', [tarea_id])
+    if not result:
+        return jsonify({'message': TASK_NOT_FOUND}), 404
+
+    # Actualizar tarea
+    try:
+        call_procedure('ActualizarTarea', [
+            tarea_id,
+            tarea_data_dict['ProyectoID'],
+            tarea_data_dict['Titulo'],
+            tarea_data_dict['Descripcion'],
+            tarea_data_dict.get('Importancia', 1),
+            tarea_data_dict.get('Estado', 'pendiente'),
+            tarea_data_dict.get('FechaVencimiento', None)
+        ])
+        app.logger.info(f"Tarea actualizada correctamente: {tarea_id}")
+    except Exception as e:
+        app.logger.error(f"Error al actualizar la tarea: {e}")
+        return jsonify({'message': 'Internal server error'}), 500
+
+    return jsonify({'message': 'Task updated successfully'}), 200
+
 
 @tareas_bp.route('/tareas/<id>', methods=['DELETE'])
 @token_required
@@ -206,6 +280,7 @@ def delete_tarea(current_user, id):
     result = call_procedure('ObtenerTareaPorID', [id])
     if not result:
         return jsonify({'message': TASK_NOT_FOUND}), 404
+
     call_procedure('EliminarTarea', [id])
     socketio.emit('delete_task', {'task_id': id}, namespace='/')
     return '', 204

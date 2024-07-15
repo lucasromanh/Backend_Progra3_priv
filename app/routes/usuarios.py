@@ -17,7 +17,7 @@ usuarios_schema = UsuarioSchema(many=True)
 
 @usuarios_bp.route('/usuarios', methods=['GET'])
 @token_required
-def get_usuarios():
+def get_usuarios(current_user):
     """
     Get All Users
     ---
@@ -31,12 +31,13 @@ def get_usuarios():
           items:
             $ref: '#/definitions/Usuario'
     """
+    app.logger.info(f"User accessing all users: {current_user.UsuarioID}")
     result = call_procedure('ObtenerUsuarios', [])
     return jsonify(result), 200
 
 @usuarios_bp.route('/usuarios/<int:id>', methods=['GET'])
 @token_required
-def get_usuario(id):
+def get_usuario(current_user, id):
     """
     Get a User by ID
     ---
@@ -56,6 +57,7 @@ def get_usuario(id):
       404:
         description: User not found
     """
+    app.logger.info(f"User accessing user {id}: {current_user.UsuarioID}")
     result = call_procedure('ObtenerUsuarioPorID', [id])
     if not result:
         return jsonify({'message': USER_NOT_FOUND}), 404
@@ -128,7 +130,7 @@ def create_usuario():
 
 @usuarios_bp.route('/usuarios/<int:id>', methods=['PUT'])
 @token_required
-def update_usuario(id):
+def update_usuario(current_user, id):
     """
     Update a User
     ---
@@ -163,6 +165,7 @@ def update_usuario(id):
       404:
         description: User not found
     """
+    app.logger.info(f"User updating user {id}: {current_user.UsuarioID}")
     data = request.get_json()
     errors = usuario_schema.validate(data)
     if errors:
@@ -183,7 +186,7 @@ def update_usuario(id):
 
 @usuarios_bp.route('/usuarios/<int:id>', methods=['DELETE'])
 @token_required
-def delete_usuario(id):
+def delete_usuario(current_user, id):
     """
     Delete a User
     ---
@@ -201,6 +204,7 @@ def delete_usuario(id):
       404:
         description: User not found
     """
+    app.logger.info(f"User deleting user {id}: {current_user.UsuarioID}")
     result = call_procedure('ObtenerUsuarioPorID', [id])
     if not result:
         return jsonify({'message': 'User not found'}), 404

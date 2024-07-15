@@ -46,14 +46,14 @@ class TareaSchema(Schema):
     Descripcion = fields.Str()
     Importancia = fields.Int(validate=validate.Range(min=1, max=5))
     Estado = fields.Str(validate=validate.OneOf(['pendiente', 'en_proceso', 'completada']))
-    FechaVencimiento = fields.Date()
+    FechaVencimiento = fields.Date(allow_none=True)
     FechaCreacion = fields.DateTime(dump_only=True)
     UltimaActualizacion = fields.DateTime(dump_only=True)
 
     @validates('ProyectoID')
     def validate_proyecto_id(self, value):
         if not isinstance(value, int):
-            raise ValidationError('ProyectoID must be a valid integer.')
+            raise ValidationError('ProyectoID tiene que tener un valor.')
 
     @post_load
     def create_tarea(self, data, **kwargs):

@@ -1,9 +1,10 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app as app
 from werkzeug.utils import secure_filename
-import os
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..utils import call_procedure
 from app.routes.auth import token_required
 from ..schemas import AdjuntoSchema
+from ..constants import FILE_NOT_FOUND, INVALID_FILE
 
 adjuntos_bp = Blueprint('adjuntos', __name__)
 
@@ -12,9 +13,9 @@ adjuntos_schema = AdjuntoSchema(many=True)
 
 @adjuntos_bp.route('/tareas/<int:tarea_id>/adjuntos', methods=['POST'])
 @token_required
-def upload_adjunto(tarea_id):
+def upload_adjunto(current_user, tarea_id):
     """
-    Upload Attachment to Task
+    Subir un adjunto a una tarea
     ---
     tags:
       - adjuntos
@@ -25,76 +26,63 @@ def upload_adjunto(tarea_id):
         required: true
     responses:
       201:
-        description: Attachment uploaded successfully
+        description: Adjunto cargado exitosamente
         schema:
           $ref: '#/definitions/Adjunto'
       400:
-        description: Invalid input
+        description: Entrada inválida
     """
     if 'file' not in request.files:
-        return jsonify({'message': 'No file part'}), 400
+        return jsonify({'message': 'No se encontró el archivo'}), 400
     file = request.files['file']
     if file.filename == '':
-        return jsonify({'message': 'No selected file'}), 400
-    if file:
-        filename = secure_filename(file.filename)
-        filepath = os.path.join('uploads', filename)
-        file.save(filepath)
-        call_procedure('CrearAdjunto', [
-            tarea_id,
-            filepath
-        ])
-        return jsonify({'message': 'Attachment uploaded successfully'}), 201
+        return jsonify({'message': 'No se seleccionó ningún archivo'}), 400
+    filename = secure_filename(file.filename)
+    try:
+        result = call_procedure('upload_attachment', [current_user.id, tarea_id, filename, file.read()])
+        if result is None:
+            raise ValueError('Error al cargar el archivo')
+        return jsonify({'message': 'Archivo cargado exitosamente', 'id': result[0]}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
-@adjuntos_bp.route('/adjuntos/<int:id>', methods=['GET'])
+@adjuntos_bp.route('/tareas/<int:tarea_id>/adjuntos', methods=['GET'])
 @token_required
-def get_adjunto(id):
+def get_adjuntos(current_user, tarea_id):
     """
-    Get an Attachment by ID
-    ---
-    tags:
-      - adjuntos
-    parameters:
-      - in: path
-        name: id
-        type: integer
-        required: true
-        description: ID of the attachment
-    responses:
-      200:
-        description: Attachment found
-        schema:
-          $ref: '#/definitions/Adjunto'
-      404:
-        description: Attachment not found
+    Obtener todos los adjuntos de una tarea
     """
-    result = call_procedure('ObtenerAdjuntoPorID', [id])
-    if not result:
-        return jsonify({'message': 'Attachment not found'}), 404
-    return jsonify(result[0]), 200
+    try:
+        adjuntos = call_procedure('get_all_attachments', [tarea_id])
+        return jsonify({'adjuntos': adjuntos_schema.dump(adjuntos)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
-@adjuntos_bp.route('/adjuntos/<int:id>', methods=['DELETE'])
+@adjuntos_bp.route('/tareas/<int:tarea_id>/adjuntos/<int:adjunto_id>', methods=['PUT'])
 @token_required
-def delete_adjunto(id):
+def update_adjunto(current_user, tarea_id, adjunto_id):
     """
-    Delete an Attachment
-    ---
-    tags:
-      - adjuntos
-    parameters:
-      - in: path
-        name: id
-        type: integer
-        required: true
-        description: ID of the attachment
-    responses:
-      204:
-        description: Attachment deleted successfully
-      404:
-        description: Attachment not found
+    Actualizar un adjunto específico
     """
-    result = call_procedure('ObtenerAdjuntoPorID', [id])
-    if not result:
-        return jsonify({'message': 'Attachment not found'}), 404
-    call_procedure('EliminarAdjunto', [id])
-    return '', 204
+    new_data = request.json
+    try:
+        result = call_procedure('update_attachment', [adjunto_id, new_data['filename'], new_data['file_data']])
+        if result is None:
+            raise ValueError('Error al actualizar el adjunto')
+        return jsonify({'message': 'Adjunto actualizado exitosamente'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@adjuntos_bp.route('/tareas/<int:tarea_id>/adjuntos/<int:adjunto_id>', methods=['DELETE'])
+@token_required
+def delete_adjunto(current_user, tarea_id, adjunto_id):
+    """
+    Eliminar un adjunto específico
+    """
+    try:
+        result = call_procedure('delete_attachment', [adjunto_id])
+        if result is None:
+            raise ValueError('Error al eliminar el adjunto')
+        return jsonify({'message': 'Adjunto eliminado exitosamente'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

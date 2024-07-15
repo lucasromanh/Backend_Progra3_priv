@@ -13,118 +13,127 @@ comentarios_schema = ComentarioSchema(many=True)
 @token_required
 def get_comentarios():
     """
-    Get All Comments
+    Obtener todos los comentarios.
     ---
     tags:
       - comentarios
     responses:
       200:
-        description: List of comments
-        schema:
-          type: array
-          items:
-            $ref: '#/definitions/Comentario'
+        description: Devuelve un listado de todos los comentarios.
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Comentario'
     """
-    result = call_procedure('ObtenerComentarios', [])
-    return jsonify(result), 200
+    result = call_procedure('ObtenerTodosLosComentarios', [])
+    return jsonify({'comentarios': comentarios_schema.dump(result)}), 200
 
 @comentarios_bp.route('/comentarios/<int:id>', methods=['GET'])
 @token_required
 def get_comentario(id):
     """
-    Get a Comment by ID
+    Obtener detalles de un comentario específico por su ID.
     ---
     tags:
       - comentarios
     parameters:
       - in: path
         name: id
-        type: integer
         required: true
-        description: ID of the comment
+        schema:
+          type: integer
+        description: El ID del comentario a obtener.
     responses:
       200:
-        description: Comment found
-        schema:
-          $ref: '#/definitions/Comentario'
+        description: Devuelve el comentario especificado.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Comentario'
       404:
-        description: Comment not found
+        description: El comentario especificado no fue encontrado.
     """
     result = call_procedure('ObtenerComentarioPorID', [id])
     if not result:
         return jsonify({'message': COMMENT_NOT_FOUND}), 404
-    return jsonify(result[0]), 200
+    return jsonify({'comentario': comentario_schema.dump(result[0])}), 200
 
 @comentarios_bp.route('/comentarios', methods=['POST'])
 @token_required
 def create_comentario():
     """
-    Create a New Comment
+    Crear un nuevo comentario.
     ---
     tags:
       - comentarios
-    parameters:
-      - in: body
-        name: body
-        schema:
-          id: CreateComentario
-          required:
-            - TareaID
-            - Texto
-          properties:
-            TareaID:
-              type: integer
-            Texto:
-              type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              TareaID:
+                type: integer
+                description: ID de la tarea asociada al comentario.
+              Texto:
+                type: string
+                description: Texto del comentario.
     responses:
       201:
-        description: Comment created successfully
-        schema:
-          $ref: '#/definitions/Comentario'
+        description: Comentario creado exitosamente.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Comentario'
       400:
-        description: Invalid input
+        description: Entrada inválida.
     """
     data = request.get_json()
     errors = comentario_schema.validate(data)
     if errors:
         return jsonify(errors), 400
-    call_procedure('CrearComentario', [
+    comentario_id = call_procedure('CrearComentario', [
         data['TareaID'],
         id.UsuarioID,
         data['Texto']
     ])
-    return jsonify({'message': 'Comment created successfully'}), 201
+    return jsonify({'message': 'Comentario creado exitosamente', 'id': comentario_id}), 201
 
 @comentarios_bp.route('/comentarios/<int:id>', methods=['PUT'])
 @token_required
 def update_comentario(id):
     """
-    Update a Comment
+    Actualizar un comentario existente.
     ---
     tags:
       - comentarios
     parameters:
       - in: path
         name: id
-        type: integer
         required: true
-        description: ID of the comment
-      - in: body
-        name: body
         schema:
-          id: UpdateComentario
-          properties:
-            Texto:
-              type: string
+          type: integer
+        description: El ID del comentario a actualizar.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              Texto:
+                type: string
+                description: Nuevo texto para el comentario.
     responses:
       200:
-        description: Comment updated successfully
-        schema:
-          $ref: '#/definitions/Comentario'
+        description: Comentario actualizado exitosamente.
       400:
-        description: Invalid input
+        description: Entrada inválida.
       404:
-        description: Comment not found
+        description: Comentario no encontrado.
     """
     data = request.get_json()
     errors = comentario_schema.validate(data)
@@ -132,35 +141,36 @@ def update_comentario(id):
         return jsonify(errors), 400
     result = call_procedure('ObtenerComentarioPorID', [id])
     if not result:
-        return jsonify({'message': 'Comment not found'}), 404
+        return jsonify({'message': COMMENT_NOT_FOUND}), 404
     call_procedure('ActualizarComentario', [
         id,
         data['Texto']
     ])
-    return jsonify({'message': 'Comment updated successfully'}), 200
+    return jsonify({'message': 'Comentario actualizado exitosamente'}), 200
 
 @comentarios_bp.route('/comentarios/<int:id>', methods=['DELETE'])
 @token_required
 def delete_comentario(id):
     """
-    Delete a Comment
+    Eliminar un comentario existente.
     ---
     tags:
       - comentarios
     parameters:
       - in: path
         name: id
-        type: integer
         required: true
-        description: ID of the comment
+        schema:
+          type: integer
+        description: El ID del comentario a eliminar.
     responses:
       204:
-        description: Comment deleted successfully
+        description: Comentario eliminado exitosamente.
       404:
-        description: Comment not found
+        description: Comentario no encontrado.
     """
     result = call_procedure('ObtenerComentarioPorID', [id])
     if not result:
-        return jsonify({'message': 'Comment not found'}), 404
+        return jsonify({'message': COMMENT_NOT_FOUND}), 404
     call_procedure('EliminarComentario', [id])
     return '', 204

@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify
-from ..models import db, AuditLog
+from ..utils import call_procedure
 from app.routes.auth import token_required
 from ..schemas import AuditLogSchema
 
@@ -12,17 +12,19 @@ audit_logs_schema = AuditLogSchema(many=True)
 @token_required
 def get_audit_logs(current_user):
     """
-    Get All Audit Logs
+    Obtener todos los registros de auditoría.
     ---
     tags:
       - auditoria
     responses:
       200:
-        description: List of audit logs
-        schema:
-          type: array
-          items:
-            $ref: '#/definitions/AuditLog'
+        description: Lista de registros de auditoría.
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/AuditLog'
     """
-    logs = AuditLog.query.all()
-    return audit_logs_schema.jsonify(logs), 200
+    logs = call_procedure('ObtenerTodosLosRegistrosDeAuditoria', [])
+    return jsonify({'logs': audit_logs_schema.dump(logs)}), 200

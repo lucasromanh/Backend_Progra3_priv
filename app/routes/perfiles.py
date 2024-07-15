@@ -13,139 +13,157 @@ perfiles_schema = PerfilUsuarioSchema(many=True)
 @token_required
 def get_perfiles():
     """
-    Get All Profiles
+    Obtener todos los perfiles.
     ---
     tags:
       - perfiles
     responses:
       200:
-        description: List of profiles
-        schema:
-          type: array
-          items:
-            $ref: '#/definitions/PerfilUsuario'
+        description: Devuelve un listado de todos los perfiles.
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PerfilUsuario'
     """
     result = call_procedure('ObtenerPerfilesUsuario', [])
-    return jsonify(result), 200
+    return jsonify({'perfiles': perfiles_schema.dump(result)}), 200
 
 @perfiles_bp.route('/perfiles/<int:id>', methods=['GET'])
 @token_required
 def get_perfil(id):
     """
-    Get a Profile by ID
+    Obtener detalles de un perfil específico por su ID.
     ---
     tags:
       - perfiles
     parameters:
       - in: path
         name: id
-        type: integer
         required: true
-        description: ID of the profile
+        schema:
+          type: integer
+        description: El ID del perfil a obtener.
     responses:
       200:
-        description: Profile found
-        schema:
-          $ref: '#/definitions/PerfilUsuario'
+        description: Devuelve el perfil especificado.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PerfilUsuario'
       404:
-        description: Profile not found
+        description: El perfil especificado no fue encontrado.
     """
     result = call_procedure('ObtenerPerfilUsuarioPorID', [id])
     if not result:
         return jsonify({'message': PROFILE_NOT_FOUND}), 404
-    return jsonify(result[0]), 200
+    return jsonify({'perfil': perfil_schema.dump(result[0])}), 200
 
 @perfiles_bp.route('/perfiles', methods=['POST'])
 @token_required
 def create_perfil():
     """
-    Create a New Profile
+    Crear un nuevo perfil.
     ---
     tags:
       - perfiles
-    parameters:
-      - in: body
-        name: body
-        schema:
-          id: CreatePerfil
-          required:
-            - UsuarioID
-          properties:
-            UsuarioID:
-              type: integer
-            Editable:
-              type: boolean
-            Biografia:
-              type: string
-            Intereses:
-              type: string
-            Ocupacion:
-              type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              UsuarioID:
+                type: integer
+                description: ID del usuario asociado al perfil.
+              Editable:
+                type: boolean
+                description: Indica si el perfil es editable.
+              Biografia:
+                type: string
+                description: Biografía del usuario.
+              Intereses:
+                type: string
+                description: Intereses del usuario.
+              Ocupacion:
+                type: string
+                description: Ocupación del usuario.
     responses:
       201:
-        description: Profile created successfully
-        schema:
-          $ref: '#/definitions/PerfilUsuario'
+        description: Perfil creado exitosamente.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PerfilUsuario'
       400:
-        description: Invalid input
+        description: Entrada inválida.
     """
     data = request.get_json()
     errors = perfil_schema.validate(data)
     if errors:
         return jsonify(errors), 400
-    call_procedure('CrearPerfilUsuario', [
+    perfil_id = call_procedure('CrearPerfilUsuario', [
         data['UsuarioID'],
         data.get('Editable', True),
         data.get('Biografia', ''),
         data.get('Intereses', ''),
         data.get('Ocupacion', '')
     ])
-    return jsonify({'message': 'Profile created successfully'}), 201
+    return jsonify({'message': 'Perfil creado exitosamente', 'id': perfil_id}), 201
 
 @perfiles_bp.route('/perfiles/<int:id>', methods=['PUT'])
 @token_required
 def update_perfil(id):
     """
-    Update a Profile
+    Actualizar un perfil existente.
     ---
     tags:
       - perfiles
     parameters:
       - in: path
         name: id
-        type: integer
         required: true
-        description: ID of the profile
-      - in: body
-        name: body
         schema:
-          id: UpdatePerfil
-          properties:
-            Editable:
-              type: boolean
-            Biografia:
-              type: string
-            Intereses:
-              type: string
-            Ocupacion:
-              type: string
+          type: integer
+        description: El ID del perfil a actualizar.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              UsuarioID:
+                type: integer
+                description: ID del usuario asociado al perfil.
+              Editable:
+                type: boolean
+                description: Indica si el perfil es editable.
+              Biografia:
+                type: string
+                description: Biografía del usuario.
+              Intereses:
+                type: string
+                description: Intereses del usuario.
+              Ocupacion:
+                type: string
+                description: Ocupación del usuario.
     responses:
       200:
-        description: Profile updated successfully
-        schema:
-          $ref: '#/definitions/PerfilUsuario'
+        description: Perfil actualizado exitosamente.
       400:
-        description: Invalid input
+        description: Entrada inválida.
       404:
-        description: Profile not found
+        description: Perfil no encontrado.
     """
     data = request.get_json()
     errors = perfil_schema.validate(data)
     if errors:
         return jsonify(errors), 400
-    result = call_procedure('ObtenerPerfilUsuarioPorID', [id])
-    if not result:
-        return jsonify({'message': 'Profile not found'}), 404
+    if not call_procedure('VerificarPerfilUsuarioExistente', [id]):
+        return jsonify({'message': PROFILE_NOT_FOUND}), 404
     call_procedure('ActualizarPerfilUsuario', [
         id,
         data['UsuarioID'],
@@ -154,30 +172,30 @@ def update_perfil(id):
         data.get('Intereses', ''),
         data.get('Ocupacion', '')
     ])
-    return jsonify({'message': 'Profile updated successfully'}), 200
+    return jsonify({'message': 'Perfil actualizado exitosamente'}), 200
 
 @perfiles_bp.route('/perfiles/<int:id>', methods=['DELETE'])
 @token_required
 def delete_perfil(id):
     """
-    Delete a Profile
+    Eliminar un perfil existente.
     ---
     tags:
       - perfiles
     parameters:
       - in: path
         name: id
-        type: integer
         required: true
-        description: ID of the profile
+        schema:
+          type: integer
+        description: El ID del perfil a eliminar.
     responses:
       204:
-        description: Profile deleted successfully
+        description: Perfil eliminado exitosamente.
       404:
-        description: Profile not found
+        description: Perfil no encontrado.
     """
-    result = call_procedure('ObtenerPerfilUsuarioPorID', [id])
-    if not result:
-        return jsonify({'message': 'Profile not found'}), 404
+    if not call_procedure('VerificarPerfilUsuarioExistente', [id]):
+        return jsonify({'message': PROFILE_NOT_FOUND}), 404
     call_procedure('EliminarPerfilUsuario', [id])
     return '', 204

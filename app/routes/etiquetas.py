@@ -1,229 +1,171 @@
 from flask import Blueprint, request, jsonify
 from ..utils import call_procedure
 from app.routes.auth import token_required
-from ..schemas import EtiquetaSchema, TareaEtiquetaSchema
-from ..constants import TAG_NOT_FOUND
+from ..schemas import EtiquetaSchema
 
 etiquetas_bp = Blueprint('etiquetas', __name__)
 
 etiqueta_schema = EtiquetaSchema()
 etiquetas_schema = EtiquetaSchema(many=True)
-tarea_etiqueta_schema = TareaEtiquetaSchema()
 
 @etiquetas_bp.route('/etiquetas', methods=['GET'])
 @token_required
 def get_etiquetas():
     """
-    Get All Tags
+    Obtener todas las etiquetas disponibles.
     ---
     tags:
       - etiquetas
     responses:
       200:
-        description: List of tags
-        schema:
-          type: array
-          items:
-            $ref: '#/definitions/Etiqueta'
+        description: Devuelve un listado de todas las etiquetas.
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Etiqueta'
     """
-    result = call_procedure('ObtenerEtiquetas', [])
-    return jsonify(result), 200
+    etiquetas = call_procedure('ObtenerTodasLasEtiquetas', [])
+    return jsonify({'etiquetas': etiquetas_schema.dump(etiquetas)}), 200
 
 @etiquetas_bp.route('/etiquetas/<int:id>', methods=['GET'])
 @token_required
 def get_etiqueta(id):
     """
-    Get a Tag by ID
+    Obtener detalles de una etiqueta específica por su ID.
     ---
     tags:
       - etiquetas
     parameters:
       - in: path
         name: id
-        type: integer
         required: true
-        description: ID of the tag
+        schema:
+          type: integer
+        description: El ID de la etiqueta a obtener.
     responses:
       200:
-        description: Tag found
-        schema:
-          $ref: '#/definitions/Etiqueta'
+        description: Devuelve la etiqueta especificada.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Etiqueta'
       404:
-        description: Tag not found
+        description: La etiqueta especificada no fue encontrada.
     """
-    result = call_procedure('ObtenerEtiquetaPorID', [id])
-    if not result:
-        return jsonify({'message': TAG_NOT_FOUND}), 404
-    return jsonify(result[0]), 200
+    etiqueta = call_procedure('ObtenerEtiquetaPorID', [id])
+    if not etiqueta:
+        return jsonify({'message': 'Etiqueta no encontrada'}), 404
+    return jsonify({'etiqueta': etiqueta_schema.dump(etiqueta)}), 200
 
 @etiquetas_bp.route('/etiquetas', methods=['POST'])
 @token_required
 def create_etiqueta():
     """
-    Create a New Tag
+    Crear una nueva etiqueta.
     ---
     tags:
       - etiquetas
-    parameters:
-      - in: body
-        name: body
-        schema:
-          id: CreateEtiqueta
-          required:
-            - Nombre
-          properties:
-            Nombre:
-              type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              nombre:
+                type: string
+                description: Nombre de la nueva etiqueta.
+              color:
+                type: string
+                description: Color de la nueva etiqueta.
     responses:
       201:
-        description: Tag created successfully
-        schema:
-          $ref: '#/definitions/Etiqueta'
+        description: Etiqueta creada exitosamente.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Etiqueta'
       400:
-        description: Invalid input
+        description: Entrada inválida.
     """
     data = request.get_json()
-    errors = etiqueta_schema.validate(data)
-    if errors:
-        return jsonify(errors), 400
-    call_procedure('CrearEtiqueta', [
-        data['Nombre']
-    ])
-    return jsonify({'message': 'Tag created successfully'}), 201
+    nombre = data.get('nombre')
+    color = data.get('color')
+    if not nombre or not color:
+        return jsonify({'message': 'Datos insuficientes para crear una etiqueta'}), 400
+    etiqueta_id = call_procedure('CrearEtiqueta', [nombre, color])
+    return jsonify({'message': 'Etiqueta creada exitosamente', 'id': etiqueta_id}), 201
 
 @etiquetas_bp.route('/etiquetas/<int:id>', methods=['PUT'])
 @token_required
 def update_etiqueta(id):
     """
-    Update a Tag
+    Actualizar una etiqueta existente.
     ---
     tags:
       - etiquetas
     parameters:
       - in: path
         name: id
-        type: integer
         required: true
-        description: ID of the tag
-      - in: body
-        name: body
         schema:
-          id: UpdateEtiqueta
-          properties:
-            Nombre:
-              type: string
+          type: integer
+        description: El ID de la etiqueta a actualizar.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              nombre:
+                type: string
+                description: Nuevo nombre para la etiqueta.
+              color:
+                type: string
+                description: Nuevo color para la etiqueta.
     responses:
       200:
-        description: Tag updated successfully
-        schema:
-          $ref: '#/definitions/Etiqueta'
+        description: Etiqueta actualizada exitosamente.
       400:
-        description: Invalid input
+        description: Entrada inválida.
       404:
-        description: Tag not found
+        description: Etiqueta no encontrada.
     """
     data = request.get_json()
-    errors = etiqueta_schema.validate(data)
-    if errors:
-        return jsonify(errors), 400
-    result = call_procedure('ObtenerEtiquetaPorID', [id])
-    if not result:
-        return jsonify({'message': 'Tag not found'}), 404
-    call_procedure('ActualizarEtiqueta', [
-        id,
-        data['Nombre']
-    ])
-    return jsonify({'message': 'Tag updated successfully'}), 200
+    nombre = data.get('nombre')
+    color = data.get('color')
+    if not nombre or not color:
+        return jsonify({'message': 'Datos insuficientes para actualizar la etiqueta'}), 400
+    if not call_procedure('VerificarEtiquetaExistente', [id]):
+        return jsonify({'message': 'Etiqueta no encontrada'}), 404
+    call_procedure('ActualizarEtiqueta', [id, nombre, color])
+    return jsonify({'message': 'Etiqueta actualizada exitosamente'}), 200
 
 @etiquetas_bp.route('/etiquetas/<int:id>', methods=['DELETE'])
 @token_required
 def delete_etiqueta(id):
     """
-    Delete a Tag
+    Eliminar una etiqueta existente.
     ---
     tags:
       - etiquetas
     parameters:
       - in: path
         name: id
-        type: integer
         required: true
-        description: ID of the tag
+        schema:
+          type: integer
+        description: El ID de la etiqueta a eliminar.
     responses:
       204:
-        description: Tag deleted successfully
+        description: Etiqueta eliminada exitosamente.
       404:
-        description: Tag not found
+        description: Etiqueta no encontrada.
     """
-    result = call_procedure('ObtenerEtiquetaPorID', [id])
-    if not result:
-        return jsonify({'message': 'Tag not found'}), 404
+    if not call_procedure('VerificarEtiquetaExistente', [id]):
+        return jsonify({'message': 'Etiqueta no encontrada'}), 404
     call_procedure('EliminarEtiqueta', [id])
-    return '', 204
-
-@etiquetas_bp.route('/tareas/<int:tarea_id>/etiquetas', methods=['POST'])
-@token_required
-def add_etiqueta_to_tarea(tarea_id):
-    """
-    Add Tag to Task
-    ---
-    tags:
-      - etiquetas
-    parameters:
-      - in: body
-        name: body
-        schema:
-          id: AddEtiquetaToTarea
-          required:
-            - EtiquetaID
-          properties:
-            EtiquetaID:
-              type: integer
-    responses:
-      201:
-        description: Tag added to task successfully
-        schema:
-          $ref: '#/definitions/TareaEtiqueta'
-      400:
-        description: Invalid input
-    """
-    data = request.get_json()
-    errors = tarea_etiqueta_schema.validate(data)
-    if errors:
-        return jsonify(errors), 400
-    call_procedure('AgregarEtiquetaATarea', [
-        tarea_id,
-        data['EtiquetaID']
-    ])
-    return jsonify({'message': 'Tag added to task successfully'}), 201
-
-@etiquetas_bp.route('/tareas/<int:tarea_id>/etiquetas/<int:etiqueta_id>', methods=['DELETE'])
-@token_required
-def remove_etiqueta_from_tarea(tarea_id, etiqueta_id):
-    """
-    Remove Tag from Task
-    ---
-    tags:
-      - etiquetas
-    parameters:
-      - in: path
-        name: tarea_id
-        type: integer
-        required: true
-        description: ID of the task
-      - in: path
-        name: etiqueta_id
-        type: integer
-        required: true
-        description: ID of the tag
-    responses:
-      204:
-        description: Tag removed from task successfully
-      404:
-        description: Tag or Task not found
-    """
-    call_procedure('RemoverEtiquetaDeTarea', [
-        tarea_id,
-        etiqueta_id
-    ])
     return '', 204

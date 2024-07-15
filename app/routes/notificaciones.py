@@ -13,157 +13,166 @@ notificaciones_schema = NotificacionSchema(many=True)
 @token_required
 def get_notificaciones():
     """
-    Get All Notifications
+    Obtener todas las notificaciones.
     ---
     tags:
       - notificaciones
     responses:
       200:
-        description: List of notifications
-        schema:
-          type: array
-          items:
-            $ref: '#/definitions/Notificacion'
+        description: Devuelve un listado de todas las notificaciones.
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Notificacion'
     """
-    result = call_procedure('ObtenerNotificaciones', [])
-    return jsonify(result), 200
+    result = call_procedure('ObtenerTodasLasNotificaciones', [])
+    return jsonify({'notificaciones': notificaciones_schema.dump(result)}), 200
 
 @notificaciones_bp.route('/notificaciones/<int:id>', methods=['GET'])
 @token_required
 def get_notificacion(id):
     """
-    Get a Notification by ID
+    Obtener detalles de una notificación específica por su ID.
     ---
     tags:
       - notificaciones
     parameters:
       - in: path
         name: id
-        type: integer
         required: true
-        description: ID of the notification
+        schema:
+          type: integer
+        description: El ID de la notificación a obtener.
     responses:
       200:
-        description: Notification found
-        schema:
-          $ref: '#/definitions/Notificacion'
+        description: Devuelve la notificación especificada.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Notificacion'
       404:
-        description: Notification not found
+        description: La notificación especificada no fue encontrada.
     """
     result = call_procedure('ObtenerNotificacionPorID', [id])
     if not result:
         return jsonify({'message': NOTIFICATION_NOT_FOUND}), 404
-    return jsonify(result[0]), 200
+    return jsonify({'notificacion': notificacion_schema.dump(result[0])}), 200
 
 @notificaciones_bp.route('/notificaciones', methods=['POST'])
 @token_required
 def create_notificacion():
     """
-    Create a New Notification
+    Crear una nueva notificación.
     ---
     tags:
       - notificaciones
-    parameters:
-      - in: body
-        name: body
-        schema:
-          id: CreateNotificacion
-          required:
-            - UsuarioID
-            - Mensaje
-          properties:
-            UsuarioID:
-              type: integer
-            Mensaje:
-              type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              UsuarioID:
+                type: integer
+                description: ID del usuario al que se envía la notificación.
+              Mensaje:
+                type: string
+                description: Mensaje de la notificación.
     responses:
       201:
-        description: Notification created successfully
-        schema:
-          $ref: '#/definitions/Notificacion'
+        description: Notificación creada exitosamente.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Notificacion'
       400:
-        description: Invalid input
+        description: Entrada inválida.
     """
     data = request.get_json()
     errors = notificacion_schema.validate(data)
     if errors:
         return jsonify(errors), 400
-    call_procedure('CrearNotificacion', [
+    notificacion_id = call_procedure('CrearNotificacion', [
         data['UsuarioID'],
         data['Mensaje'],
         False
     ])
-    return jsonify({'message': 'Notification created successfully'}), 201
+    return jsonify({'message': 'Notificación creada exitosamente', 'id': notificacion_id}), 201
 
 @notificaciones_bp.route('/notificaciones/<int:id>', methods=['PUT'])
 @token_required
 def update_notificacion(id):
     """
-    Update a Notification
+    Actualizar una notificación existente.
     ---
     tags:
       - notificaciones
     parameters:
       - in: path
         name: id
-        type: integer
         required: true
-        description: ID of the notification
-      - in: body
-        name: body
         schema:
-          id: UpdateNotificacion
-          properties:
-            Mensaje:
-              type: string
-            Leida:
-              type: boolean
+          type: integer
+        description: El ID de la notificación a actualizar.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              Mensaje:
+                type: string
+                description: Nuevo mensaje para la notificación.
+              Leida:
+                type: boolean
+                description: Estado de lectura de la notificación.
     responses:
       200:
-        description: Notification updated successfully
-        schema:
-          $ref: '#/definitions/Notificacion'
+        description: Notificación actualizada exitosamente.
       400:
-        description: Invalid input
+        description: Entrada inválida.
       404:
-        description: Notification not found
+        description: Notificación no encontrada.
     """
     data = request.get_json()
     errors = notificacion_schema.validate(data)
     if errors:
         return jsonify(errors), 400
-    result = call_procedure('ObtenerNotificacionPorID', [id])
-    if not result:
-        return jsonify({'message': 'Notification not found'}), 404
+    if not call_procedure('VerificarNotificacionExistente', [id]):
+        return jsonify({'message': NOTIFICATION_NOT_FOUND}), 404
     call_procedure('ActualizarNotificacion', [
         id,
         data['Mensaje'],
         data.get('Leida', False)
     ])
-    return jsonify({'message': 'Notification updated successfully'}), 200
+    return jsonify({'message': 'Notificación actualizada exitosamente'}), 200
 
 @notificaciones_bp.route('/notificaciones/<int:id>', methods=['DELETE'])
 @token_required
 def delete_notificacion(id):
     """
-    Delete a Notification
+    Eliminar una notificación existente.
     ---
     tags:
       - notificaciones
     parameters:
       - in: path
         name: id
-        type: integer
         required: true
-        description: ID of the notification
+        schema:
+          type: integer
+        description: El ID de la notificación a eliminar.
     responses:
       204:
-        description: Notification deleted successfully
+        description: Notificación eliminada exitosamente.
       404:
-        description: Notification not found
+        description: Notificación no encontrada.
     """
-    result = call_procedure('ObtenerNotificacionPorID', [id])
-    if not result:
-        return jsonify({'message': 'Notification not found'}), 404
+    if not call_procedure('VerificarNotificacionExistente', [id]):
+        return jsonify({'message': NOTIFICATION_NOT_FOUND}), 404
     call_procedure('EliminarNotificacion', [id])
     return '', 204

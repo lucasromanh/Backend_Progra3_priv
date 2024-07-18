@@ -76,22 +76,23 @@ def get_tarea(current_user, id):
       404:
         description: Task not found
     """
-    task = obtener_tarea_por_id(id)
-    if not task:
-        return jsonify({'message': TASK_NOT_FOUND}), 404
+    tasks = obtener_todas_las_tareas()
+    if not tasks:
+        return jsonify({'message': 'No tasks found'}), 404
     
-    task = task[0]  # Since obtener_tarea_por_id returns a list of one element
-    formatted_task = {
-        "id": task['TareaID'],
-        "board_id": task['ProyectoID'],
-        "title": task['Titulo'],
-        "description": task['Descripcion'],
-        "status": task['Estado'],
-        "due_date": task['FechaVencimiento'].isoformat() if task['FechaVencimiento'] else None,
-        "created_at": task['FechaCreacion'].isoformat() if task['FechaCreacion'] else None,
-        "updated_at": task['UltimaActualizacion'].isoformat() if task['UltimaActualizacion'] else None
-    }
-    return jsonify(formatted_task), 200
+    formatted_tasks = []
+    for task in tasks:
+        formatted_tasks.append({
+            "id": task['TareaID'],
+            "board_id": task['ProyectoID'],
+            "title": task['Titulo'],
+            "description": task['Descripcion'],
+            "status": task['Estado'],
+            "due_date": task['FechaVencimiento'].isoformat() if task['FechaVencimiento'] else None,
+            "created_at": task['FechaCreacion'].isoformat() if task['FechaCreacion'] else None,
+            "updated_at": task['UltimaActualizacion'].isoformat() if task['UltimaActualizacion'] else None
+        })
+    return jsonify(formatted_tasks), 200
 
 @tareas_bp.route('/tareas', methods=['POST'])
 @token_required
@@ -134,11 +135,11 @@ def create_tarea(current_user):
     """
     data = request.get_json()
     app.logger.info(f"User creating task: {current_user.UsuarioID}")
-    app.logger.info(f"Data received: {data}")  # Imprimir datos recibidos
+    app.logger.info(f"Data received: {data}") 
 
     errors = tarea_schema.validate(data)
     if errors:
-        app.logger.error(f"Validation errors: {errors}")  # Imprimir errores de validación
+        app.logger.error(f"Validation errors: {errors}")  
         return jsonify(errors), 400
     try:
         result = call_procedure('CrearTarea', [
@@ -149,7 +150,7 @@ def create_tarea(current_user):
             data.get('Estado', 'pendiente'),
             data.get('FechaVencimiento', None)
         ])
-        app.logger.info(f"Result from CrearTarea: {result}")  # Log del resultado
+        app.logger.info(f"Result from CrearTarea: {result}") 
         new_task_id = result[0][0]
         new_task = {
             'id': new_task_id,
@@ -163,7 +164,7 @@ def create_tarea(current_user):
         socketio.emit('new_task', {'task': new_task}, namespace='/')
         return jsonify({'message': 'Task created successfully', 'task': new_task}), 201
     except Exception as e:
-        app.logger.error(f"Error creating task: {e}")  # Log del error
+        app.logger.error(f"Error creating task: {e}")  
         return jsonify({'message': 'Internal server error'}), 500
 
 @tareas_bp.route('/tareas/<int:id>', methods=['PUT'])
@@ -212,7 +213,6 @@ def update_tarea(current_user, id):
     data = request.get_json()
     app.logger.info(f"Datos recibidos para actualización: {data}")
 
-    # Eliminar campos no deseados antes de la validación
     data.pop('id', None)
     data.pop('columnId', None)
     data.pop('message', None)
@@ -226,17 +226,45 @@ def update_tarea(current_user, id):
         app.logger.error(f"Errores de validación: {err.messages}")
         return jsonify(err.messages), 400
 
-    # Convertir el id a entero
     try:
         tarea_id = int(id)
     except ValueError:
         app.logger.error(f"ID de tarea inválido: {id}")
         return jsonify({'message': 'Invalid task ID'}), 400
 
-    # Verificar si la tarea existe
     result = call_procedure('ObtenerTareaPorID', [tarea_id])
-    if not result:
+    if not result or not result[0]:
+        app.logger.error(f"Tarea no encontrada o datos incompletos para la tarea: {result}")
         return jsonify({'message': TASK_NOT_FOUND}), 404
+
+    tarea_actual = result[0]
+    app.logger.info(f"Tarea actual obtenida: {tarea_actual}")
+    
+    tarea_data_dict['ProyectoID'] = tarea_data_dict.get('ProyectoID', tarea_actual[1])
+    tarea_data_dict['Titulo'] = tarea_data_dict.get('Titulo', tarea_actual[2])
+    tarea_data_dict['Descripcion'] = tarea_data_dict.get('Descripcion', tarea_actual[3])
+    tarea_data_dict['Importancia'] = tarea_data_dict.get('Importancia', tarea_actual[4])
+    tarea_data_dict['Estado'] = tarea_data_dict.get('Estado', tarea_actual[5])
+    tarea_data_dict['FechaVencimiento'] = tarea_data_dict.get('FechaVencimiento', tarea_actual[6])
+
+    if tarea_data_dict['ProyectoID'] is None:
+        tarea_data_dict['ProyectoID'] = tarea_actual[1]
+    if tarea_data_dict['Titulo'] is None:
+        tarea_data_dict['Titulo'] = tarea_actual[2]
+    if tarea_data_dict['Descripcion'] is None:
+        tarea_data_dict['Descripcion'] = tarea_actual[3]
+    if tarea_data_dict['Importancia'] is None:
+        tarea_data_dict['Importancia'] = tarea_actual[4]
+    if tarea_data_dict['Estado'] is None:
+        tarea_data_dict['Estado'] = tarea_actual[5]
+    if tarea_data_dict['FechaVencimiento'] is None:
+        tarea_data_dict['FechaVencimiento'] = tarea_actual[6]
+
+    if isinstance(tarea_data_dict['Importancia'], str):
+        try:
+            tarea_data_dict['Importancia'] = int(tarea_data_dict['Importancia'])
+        except ValueError:
+            tarea_data_dict['Importancia'] = 1 
 
     # Actualizar tarea
     try:
@@ -245,9 +273,9 @@ def update_tarea(current_user, id):
             tarea_data_dict['ProyectoID'],
             tarea_data_dict['Titulo'],
             tarea_data_dict['Descripcion'],
-            tarea_data_dict.get('Importancia', 1),
-            tarea_data_dict.get('Estado', 'pendiente'),
-            tarea_data_dict.get('FechaVencimiento', None)
+            tarea_data_dict['Importancia'],
+            tarea_data_dict['Estado'],
+            tarea_data_dict['FechaVencimiento']
         ])
         app.logger.info(f"Tarea actualizada correctamente: {tarea_id}")
     except Exception as e:

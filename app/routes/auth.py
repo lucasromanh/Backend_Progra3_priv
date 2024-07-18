@@ -3,6 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from app.models import db, Usuario, Board
 import jwt
 import datetime
+from flask import make_response
 from functools import wraps
 
 auth_bp = Blueprint('auth', __name__)
@@ -142,7 +143,13 @@ def register():
     new_user.defaultBoardId = default_board.BoardID
     db.session.commit()
 
-    return jsonify({'message': 'User registered successfully'}), 201
+    return jsonify({
+        'message': 'usuario registrado de forma Perfessssta',
+        'user': {
+            'UsuarioID': new_user.UsuarioID,
+            'defaultBoardId': new_user.defaultBoardId
+        }
+    }), 201
 
 @auth_bp.route('/logout', methods=['POST'])
 @token_required
@@ -156,7 +163,11 @@ def logout(current_user):
       200:
         description: Logout successful
     """
-    return jsonify({'message': 'Logout successful'}), 200
+    app.logger.info(f"Usuario {current_user.UsuarioID} cerrando sesión.")
+    response = make_response(jsonify({"msg": "Cierre de sesión exitoso"}))
+    response.delete_cookie('access_token_cookie')  
+    response.delete_cookie('refresh_token_cookie')  
+    return response, 200
 
 @auth_bp.route('/refresh-token', methods=['POST'])
 @token_required
@@ -180,3 +191,24 @@ def refresh_token(current_user):
     """
     token = jwt.encode({'UsuarioID': current_user.UsuarioID, 'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)}, app.config['SECRET_KEY'], algorithm="HS256")
     return jsonify({'token': token})
+
+@auth_bp.route('/validate-token', methods=['POST'])
+def validate_token():
+    token = request.json.get('token')
+    if not token:
+        return jsonify({'message': 'Token is missing'}), 400
+    try:
+        data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+        user = Usuario.query.filter_by(UsuarioID=data['UsuarioID']).first()
+        if user:
+            user_data = {
+                'UsuarioID': user.UsuarioID,
+                'defaultBoardId': user.defaultBoardId
+            }
+            return jsonify({'user': user_data}), 200
+        else:
+            return jsonify({'message': 'User not found'}), 404
+    except jwt.ExpiredSignatureError:
+        return jsonify({'message': 'Token expired'}), 403
+    except jwt.InvalidTokenError:
+        return jsonify({'message': 'Token is invalid'}), 403

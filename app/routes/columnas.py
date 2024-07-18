@@ -58,6 +58,35 @@ def get_columna(id):
     if not columna:
         return jsonify({'message': 'Columna no encontrada'}), 404
     return jsonify({'columna': columna_schema.dump(columna)}), 200
+  
+@columnas_bp.route('/columnas/proyecto/<int:proyecto_id>', methods=['GET'])
+@token_required
+def get_columnas_by_proyecto(current_user, proyecto_id):
+    """
+    Obtener todas las columnas de un proyecto.
+    ---
+    tags:
+      - columnas
+    parameters:
+      - in: path
+        name: proyecto_id
+        required: true
+        schema:
+          type: integer
+        description: El ID del proyecto del que se desean obtener las columnas.
+    responses:
+      200:
+        description: Devuelve un listado de todas las columnas del proyecto.
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Columna'
+    """
+    columnas = call_procedure('ObtenerColumnasPorProyectoID', [proyecto_id])
+    return jsonify({'columnas': columnas_schema.dump(columnas)}), 200
+
 
 @columnas_bp.route('/columnas', methods=['POST'])
 @token_required
@@ -95,8 +124,15 @@ def create_columna(current_user):
     columna_nombre = data.get('ColumnaNombre')
     if not proyecto_id or not columna_nombre:
         return jsonify({'message': 'Datos insuficientes para crear una columna'}), 400
-    columna_id = call_procedure('CrearColumna', [proyecto_id, columna_nombre])
-    return jsonify({'message': 'Columna creada exitosamente', 'id': columna_id}), 201
+    
+    try:
+        columna_id_result = call_procedure('CrearColumna', [proyecto_id, columna_nombre])
+        columna_id = columna_id_result[0][0]  # Asegúrate de extraer el valor correcto del resultado
+        return jsonify({'message': 'Columna creada exitosamente', 'id': columna_id}), 201
+    except Exception as e:
+        from flask import current_app as app
+        app.logger.error(f"Error al crear columna: {e}")
+        return jsonify({'message': 'Internal server error'}), 500
 
 @columnas_bp.route('/columnas/<int:id>', methods=['PUT'])
 @token_required
@@ -135,10 +171,20 @@ def update_columna(id):
     columna_nombre = data.get('ColumnaNombre')
     if not columna_nombre:
         return jsonify({'message': 'Datos insuficientes para actualizar la columna'}), 400
-    if not call_procedure('VerificarColumnaExistente', [id]):
-        return jsonify({'message': 'Columna no encontrada'}), 404
-    call_procedure('ActualizarColumna', [id, columna_nombre])
-    return jsonify({'message': 'Columna actualizada exitosamente'}), 200
+
+    try:
+        # Verificar si la columna existe
+        columna_existente = call_procedure('ObtenerColumnaPorID', [id])
+        if not columna_existente:
+            return jsonify({'message': 'Columna no encontrada'}), 404
+        
+        # Actualizar la columna
+        call_procedure('ActualizarColumna', [id, columna_nombre])
+        return jsonify({'message': 'Columna actualizada exitosamente'}), 200
+    except Exception as e:
+        from flask import current_app as app
+        app.logger.error(f"Error al actualizar columna: {e}")
+        return jsonify({'message': 'Internal server error'}), 500
 
 @columnas_bp.route('/columnas/<int:id>', methods=['DELETE'])
 @token_required
@@ -161,7 +207,16 @@ def delete_columna(id):
       404:
         description: Columna no encontrada.
     """
-    if not call_procedure('VerificarColumnaExistente', [id]):
-        return jsonify({'message': 'Columna no encontrada'}), 404
-    call_procedure('EliminarColumna', [id])
-    return '', 204
+    try:
+        # Verificar si la columna existe
+        columna_existente = call_procedure('ObtenerColumnaPorID', [id])
+        if not columna_existente:
+            return jsonify({'message': 'Columna no encontrada'}), 404
+        
+        # Eliminar la columna
+        call_procedure('EliminarColumna', [id])
+        return '', 204
+    except Exception as e:
+        from flask import current_app as app
+        app.logger.error(f"Error al eliminar columna: {e}")
+        return jsonify({'message': 'Internal server error'}), 500

@@ -30,6 +30,7 @@ def create_app(config_class='config.DevelopmentConfig'):
     from .routes.notificaciones import notificaciones_bp
     from .routes.etiquetas import etiquetas_bp
     from .routes.adjuntos import adjuntos_bp
+    from .routes.columnas import columnas_bp  
 
     app.register_blueprint(auth_bp, url_prefix='/api')
     app.register_blueprint(usuarios_bp, url_prefix='/api')
@@ -39,6 +40,7 @@ def create_app(config_class='config.DevelopmentConfig'):
     app.register_blueprint(notificaciones_bp, url_prefix='/api')
     app.register_blueprint(etiquetas_bp, url_prefix='/api')
     app.register_blueprint(adjuntos_bp, url_prefix='/api')
+    app.register_blueprint(columnas_bp, url_prefix='/api')  
 
     @app.route('/swagger')
     def swagger_ui():

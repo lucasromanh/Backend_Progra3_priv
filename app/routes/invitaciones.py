@@ -2,6 +2,8 @@ from flask import Blueprint, request, jsonify
 from ..utils import call_procedure
 from app.routes.auth import token_required
 from ..schemas import InvitacionSchema
+from app import db
+
 
 invitaciones_bp = Blueprint('invitaciones', __name__)
 

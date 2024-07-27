@@ -135,12 +135,13 @@ def create_tarea(current_user):
     """
     data = request.get_json()
     app.logger.info(f"User creating task: {current_user.UsuarioID}")
-    app.logger.info(f"Data received: {data}") 
+    app.logger.info(f"Data received: {data}")
 
     errors = tarea_schema.validate(data)
     if errors:
-        app.logger.error(f"Validation errors: {errors}")  
+        app.logger.error(f"Validation errors: {errors}")
         return jsonify(errors), 400
+
     try:
         result = call_procedure('CrearTarea', [
             data['ProyectoID'],
@@ -150,7 +151,7 @@ def create_tarea(current_user):
             data.get('Estado', 'pendiente'),
             data.get('FechaVencimiento', None)
         ])
-        app.logger.info(f"Result from CrearTarea: {result}") 
+        app.logger.info(f"Result from CrearTarea: {result}")
         new_task_id = result[0][0]
         new_task = {
             'id': new_task_id,
@@ -164,7 +165,7 @@ def create_tarea(current_user):
         socketio.emit('new_task', {'task': new_task}, namespace='/')
         return jsonify({'message': 'Task created successfully', 'task': new_task}), 201
     except Exception as e:
-        app.logger.error(f"Error creating task: {e}")  
+        app.logger.error(f"Error creating task: {e}")
         return jsonify({'message': 'Internal server error'}), 500
 
 @tareas_bp.route('/tareas/<int:id>', methods=['PUT'])

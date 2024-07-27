@@ -195,23 +195,53 @@ def update_usuario(current_user, id):
     """
     app.logger.info(f"Usuario actualizando usuario {id}: {current_user.UsuarioID}")
     data = request.get_json()
+    app.logger.info(f"Datos recibidos para actualización: {data}")
+
+    if 'CorreoElectronico' in data:
+        app.logger.warning("El campo 'CorreoElectronico' está presente en los datos y será eliminado")
+        data.pop('CorreoElectronico')
+
+    data.pop('UsuarioID', None)
+    data.pop('defaultBoardId', None)
+
     errors = usuario_schema.validate(data)
     if errors:
+        app.logger.error(f"Errores de validación: {errors}")
         return jsonify(errors), 400
+
     result = call_procedure('ObtenerUsuarioPorID', [id])
     if not result:
+        app.logger.error(f"Usuario no encontrado: ID {id}")
         return jsonify({'message': 'Usuario no encontrado'}), 404
-    call_procedure('ActualizarUsuario', [
-        id,
-        data['Nombre'],
-        data['Apellido'],
-        data['CorreoElectronico'],
-        data.get('Telefono', ''),
-        data.get('ImagenPerfil', ''),
-        generate_password_hash(data['Password'])
-    ])
-    return jsonify({'message': 'Usuario actualizado exitosamente'}), 200
 
+    correo_electronico = result[0][3]  # Obtener el correo electrónico actual del usuario
+    app.logger.info(f"Correo electrónico actual del usuario: {correo_electronico}")
+
+    app.logger.info(f"Ejecutando procedimiento de actualización con datos: {data}")
+    try:
+        password_hash = data.get('PasswordHash')
+        if password_hash:
+            password_hash = generate_password_hash(password_hash)
+        else:
+            # Si no se está actualizando la contraseña, obtenemos la contraseña actual del usuario
+            password_hash = result[0][6] 
+        update_data = [
+            id,
+            data['Nombre'],
+            data['Apellido'],
+            data.get('Telefono', ''),
+            data.get('ImagenPerfil', ''),
+            password_hash
+        ]
+        app.logger.info(f"Datos enviados al procedimiento almacenado ActualizarUsuario: {update_data}")
+
+        call_procedure('ActualizarUsuario', update_data)
+        app.logger.info(f"Usuario actualizado exitosamente: ID {id}")
+        return jsonify({'message': 'Usuario actualizado exitosamente'}), 200
+    except Exception as e:
+        app.logger.error(f"Error al actualizar usuario: {str(e)}")
+        return jsonify({'message': 'Error al actualizar usuario'}), 500
+      
 @usuarios_bp.route('/usuarios/<int:id>', methods=['DELETE'])
 @token_required
 def delete_usuario(current_user, id):
@@ -237,8 +267,41 @@ def delete_usuario(current_user, id):
     result = call_procedure('ObtenerUsuarioPorID', [id])
     if not result:
         return jsonify({'message': 'Usuario no encontrado'}), 404
-    call_procedure('EliminarUsuario', [id])
-    return '', 204
+
+    # Paso 1: Actualizar defaultBoardId a NULL
+    try:
+        call_procedure('ActualizarDefaultBoardId', [id])
+        app.logger.info(f"defaultBoardId actualizado a NULL para el usuario ID {id}")
+    except Exception as e:
+        app.logger.error(f"Error al actualizar defaultBoardId: {str(e)}")
+        return jsonify({'message': 'Error al actualizar defaultBoardId'}), 500
+
+    # Paso 2: Eliminar filas dependientes en la tabla `proyectos`
+    try:
+        call_procedure('EliminarProyectosPorUsuarioID', [id])
+        app.logger.info(f"Proyectos asociados con los boards del usuario ID {id} eliminados exitosamente")
+    except Exception as e:
+        app.logger.error(f"Error al eliminar proyectos: {str(e)}")
+        return jsonify({'message': 'Error al eliminar proyectos asociados a los boards del usuario'}), 500
+
+    # Paso 3: Eliminar filas dependientes en la tabla `boards`
+    try:
+        call_procedure('EliminarBoardsPorUsuarioID', [id])
+        app.logger.info(f"Boards asociados con el usuario ID {id} eliminados exitosamente")
+    except Exception as e:
+        app.logger.error(f"Error al eliminar boards: {str(e)}")
+        return jsonify({'message': 'Error al eliminar boards asociados al usuario'}), 500
+    
+    # Paso 4: Eliminar el usuario
+    try:
+        call_procedure('EliminarUsuario', [id])
+        app.logger.info(f"Usuario ID {id} eliminado exitosamente")
+        return '', 204
+    except Exception as e:
+        app.logger.error(f"Error al eliminar usuario: {str(e)}")
+        return jsonify({'message': 'Error al eliminar usuario'}), 500
+
+
 
 @usuarios_bp.route('/usuarios/<int:id>/imagen', methods=['POST'])
 @token_required
@@ -290,6 +353,8 @@ def upload_imagen_usuario(current_user, id):
     imagen.save(filepath)
     call_procedure('ActualizarImagenUsuario', [id, filename])
     return jsonify({'message': 'Imagen de perfil actualizada exitosamente'}), 200
+
+from werkzeug.security import generate_password_hash, check_password_hash
 
 @usuarios_bp.route('/usuarios/<int:id>/password', methods=['PUT'])
 @token_required
@@ -349,18 +414,40 @@ def change_password(current_user, id):
                 message:
                   type: string
     """
+    app.logger.info(f"Usuario actualizando contraseña para usuario {id}: {current_user.UsuarioID}")
     data = request.get_json()
+
+    if not data or not data.get('oldPassword') or not data.get('newPassword'):
+        app.logger.error(f"Datos insuficientes: {data}")
+        return jsonify({'message': 'Datos insuficientes para actualizar la contraseña.'}), 400
+
     old_password = data.get('oldPassword')
     new_password = data.get('newPassword')
 
     result = call_procedure('ObtenerUsuarioPorID', [id])
     if not result:
+        app.logger.error(f"Usuario no encontrado: ID {id}")
         return jsonify({'message': 'Usuario no encontrado'}), 404
 
     usuario = result[0]
-    if not generate_password_hash.check_password_hash(usuario['PasswordHash'], old_password):
-        return jsonify({'message': 'La contraseña actual es incorrecta'}), 400
+    stored_password_hash = usuario[6]  # Asume que el índice 6 es el campo PasswordHash
 
-    new_password_hash = generate_password_hash(new_password)
-    call_procedure('ActualizarPasswordUsuario', [id, new_password_hash])
-    return jsonify({'message': 'Contraseña actualizada exitosamente'}), 200
+    app.logger.info(f"Hashed password from DB: {stored_password_hash}")
+    app.logger.info(f"Old password provided: {old_password}")
+
+    # Verificar la contraseña antigua
+    if not check_password_hash(stored_password_hash, old_password):
+        app.logger.error("La contraseña actual es incorrecta.")
+        return jsonify({'message': 'La contraseña actual es incorrecta.'}), 400
+
+    # Hashear la nueva contraseña usando pbkdf2
+    new_password_hash = generate_password_hash(new_password, method='pbkdf2:sha256', salt_length=8)
+    try:
+        call_procedure('ActualizarPasswordUsuario', [id, new_password_hash])
+        app.logger.info(f"Contraseña actualizada exitosamente para usuario ID {id}")
+        return jsonify({'message': 'Contraseña actualizada exitosamente.'}), 200
+    except Exception as e:
+        app.logger.error(f"Error al actualizar contraseña: {str(e)}")
+        return jsonify({'message': 'Error al actualizar contraseña.'}), 500
+
+

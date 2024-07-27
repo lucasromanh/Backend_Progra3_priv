@@ -6,13 +6,11 @@ class UsuarioSchema(Schema):
     UsuarioID = fields.Int(dump_only=True)
     Nombre = fields.Str(required=True, validate=validate.Length(min=1, max=50))
     Apellido = fields.Str(required=True, validate=validate.Length(min=1, max=50))
-    CorreoElectronico = fields.Email(required=True, validate=validate.Length(max=100))
-    Telefono = fields.Str(validate=validate.Length(max=15))
-    ImagenPerfil = fields.Str(validate=validate.Length(max=255))
-    PasswordHash = fields.Str(load_only=True, required=True, validate=validate.Length(min=6))
-    defaultBoardId = fields.Int(dump_only=True)  
-
-
+    CorreoElectronico = fields.Email(validate=validate.Length(max=100), allow_none=True)
+    Telefono = fields.Str(validate=validate.Length(max=15), allow_none=True)
+    ImagenPerfil = fields.Str(validate=validate.Length(max=255), allow_none=True)
+    PasswordHash = fields.Str(load_only=True, validate=validate.Length(min=6), allow_none=True)
+    defaultBoardId = fields.Int(dump_only=True)
 class PerfilUsuarioSchema(Schema):
     PerfilID = fields.Int(dump_only=True)
     UsuarioID = fields.Int(required=True)

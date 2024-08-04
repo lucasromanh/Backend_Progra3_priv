@@ -61,6 +61,10 @@ class Tarea(db.Model):
     FechaCreacion = db.Column(db.DateTime, default=db.func.current_timestamp())
     UltimaActualizacion = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
 
+    labels = db.relationship('Etiqueta', secondary='Tareas_Etiquetas', backref='tareas')
+    members = db.relationship('Usuario', secondary='AsignacionesTareas', backref='tareas_asignadas')
+    checklists = db.relationship('Checklist', backref='tarea', lazy=True)
+
 class Columna(db.Model):
     __tablename__ = 'Columnas'
     ColumnaID = db.Column(db.Integer, primary_key=True)
@@ -126,3 +130,9 @@ class Portada(db.Model):
     TareaID = db.Column(db.Integer, db.ForeignKey(TAREA_ID))
     Imagen = db.Column(db.String(255), nullable=False)
     Fecha = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+class Checklist(db.Model):
+    __tablename__ = 'Checklists'
+    ChecklistID = db.Column(db.Integer, primary_key=True)
+    Titulo = db.Column(db.String(100), nullable=False)
+    TareaID = db.Column(db.Integer, db.ForeignKey(TAREA_ID), nullable=False)

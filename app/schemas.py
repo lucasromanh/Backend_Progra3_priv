@@ -11,6 +11,7 @@ class UsuarioSchema(Schema):
     ImagenPerfil = fields.Str(validate=validate.Length(max=255), allow_none=True)
     PasswordHash = fields.Str(load_only=True, validate=validate.Length(min=6), allow_none=True)
     defaultBoardId = fields.Int(dump_only=True)
+    
 class PerfilUsuarioSchema(Schema):
     PerfilID = fields.Int(dump_only=True)
     UsuarioID = fields.Int(required=True)
@@ -38,15 +39,16 @@ class ProyectoSchema(Schema):
     Titulo = fields.Str(required=True, validate=validate.Length(min=1, max=100))
 
 class TareaSchema(Schema):
-    TareaID = fields.Int(dump_only=True)
+    id = fields.Int(dump_only=True)
     ProyectoID = fields.Int(required=True)
-    Titulo = fields.Str(required=True, validate=validate.Length(min=1, max=100))
+    Titulo = fields.Str(required=True, validate=validate.Length(min=1))
     Descripcion = fields.Str()
-    Importancia = fields.Int(validate=validate.Range(min=1, max=5))
+    Importancia = fields.Int()
     Estado = fields.Str(validate=validate.OneOf(['pendiente', 'en_proceso', 'completada']))
     FechaVencimiento = fields.Date(allow_none=True)
-    FechaCreacion = fields.DateTime(dump_only=True)
-    UltimaActualizacion = fields.DateTime(dump_only=True)
+    labels = fields.List(fields.Str(), missing=[])
+    members = fields.List(fields.Str(), missing=[])
+    checklists = fields.List(fields.Dict(), missing=[])
 
     @validates('ProyectoID')
     def validate_proyecto_id(self, value):
@@ -56,6 +58,24 @@ class TareaSchema(Schema):
     @post_load
     def create_tarea(self, data, **kwargs):
         return Tarea(**data)
+
+class MiembroSchema(Schema):
+    UsuarioID = fields.Int(required=True)
+
+class EtiquetaSchema(Schema):
+    Nombre = fields.Str(required=True)
+
+class ChecklistSchema(Schema):
+    Titulo = fields.Str(required=True)
+
+class FechaSchema(Schema):
+    FechaVencimiento = fields.Date(required=True)
+
+class AdjuntoSchema(Schema):
+    Archivo = fields.Str(required=True)
+
+class PortadaSchema(Schema):
+    PortadaID = fields.Int(required=True)
 
 class ColumnaSchema(Schema):
     ColumnaID = fields.Int(dump_only=True)

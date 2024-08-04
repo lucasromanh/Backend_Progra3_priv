@@ -1,13 +1,15 @@
-from flask import Flask, redirect
+from flask import Flask, redirect, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flasgger import Swagger
 from flask_cors import CORS
 from flask_socketio import SocketIO
+from flask_jwt_extended import JWTManager
 
 db = SQLAlchemy()
 migrate = Migrate()
 socketio = SocketIO()
+jwt = JWTManager()
 
 def create_app(config_class='config.DevelopmentConfig'):
     app = Flask(__name__)
@@ -16,6 +18,7 @@ def create_app(config_class='config.DevelopmentConfig'):
     db.init_app(app)
     migrate.init_app(app, db)
     socketio.init_app(app)
+    jwt.init_app(app)  # Inicializar JWTManager
 
     # Configuración CORS
     CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
@@ -45,6 +48,15 @@ def create_app(config_class='config.DevelopmentConfig'):
     @app.route('/swagger')
     def swagger_ui():
         return redirect('/apidocs')
+
+    @app.route('/check_jwt_config')
+    def check_jwt_config():
+        return {
+            'JWT_SECRET_KEY': app.config.get('JWT_SECRET_KEY'),
+            'JWT_TOKEN_LOCATION': app.config.get('JWT_TOKEN_LOCATION'),
+            'JWT_HEADER_NAME': app.config.get('JWT_HEADER_NAME'),
+            'JWT_HEADER_TYPE': app.config.get('JWT_HEADER_TYPE')
+        }
 
     return app
 

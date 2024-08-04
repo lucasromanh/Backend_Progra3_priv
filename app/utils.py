@@ -11,7 +11,11 @@ def call_procedure(procedure_name, params):
     try:
         cursor = conn.cursor()
         cursor.callproc(procedure_name, params)
-        result = cursor.fetchall()
+        result = None
+        if cursor.description:  
+            result = cursor.fetchall()
+            columns = [column[0] for column in cursor.description]
+            result = [dict(zip(columns, row)) for row in result]
         cursor.close()
         conn.commit()
         return result

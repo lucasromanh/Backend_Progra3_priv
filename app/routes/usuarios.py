@@ -66,20 +66,21 @@ def get_usuario(current_user, id):
     app.logger.info(f"Usuario accediendo a usuario {id}: {current_user.UsuarioID}")
     result = call_procedure('ObtenerUsuarioPorID', [id])
     
-    if result:
+    if result and len(result) > 0:
+        usuario = result[0]  # Asegúrate de acceder al primer elemento de la lista resultante
         app.logger.info(f"Resultado del procedimiento almacenado: {result}")
-        usuario = {
-            'UsuarioID': result[0][0],
-            'Nombre': result[0][1],
-            'Apellido': result[0][2],
-            'CorreoElectronico': result[0][3],
-            'Telefono': result[0][4],
-            'ImagenPerfil': result[0][5],
-            'PasswordHash': result[0][6],
-            'defaultBoardId': result[0][7],
+        usuario_data = {
+            'UsuarioID': usuario['UsuarioID'],
+            'Nombre': usuario['Nombre'],
+            'Apellido': usuario['Apellido'],
+            'CorreoElectronico': usuario['CorreoElectronico'],
+            'Telefono': usuario['Telefono'],
+            'ImagenPerfil': usuario['ImagenPerfil'],
+            'PasswordHash': usuario['PasswordHash'],
+            'defaultBoardId': usuario['defaultBoardId'],
         }
-        app.logger.info(f"Datos del usuario: {usuario}")
-        return jsonify({'usuario': usuario}), 200
+        app.logger.info(f"Datos del usuario: {usuario_data}")
+        return jsonify({'usuario': usuario_data}), 200
     else:
         return jsonify({'message': USER_NOT_FOUND}), 404
 
@@ -197,12 +198,10 @@ def update_usuario(current_user, id):
     data = request.get_json()
     app.logger.info(f"Datos recibidos para actualización: {data}")
 
-    if 'CorreoElectronico' in data:
-        app.logger.warning("El campo 'CorreoElectronico' está presente en los datos y será eliminado")
-        data.pop('CorreoElectronico')
-
+    # Remove fields that should not be updated
     data.pop('UsuarioID', None)
     data.pop('defaultBoardId', None)
+    data.pop('CorreoElectronico', None)
 
     errors = usuario_schema.validate(data)
     if errors:
@@ -214,23 +213,19 @@ def update_usuario(current_user, id):
         app.logger.error(f"Usuario no encontrado: ID {id}")
         return jsonify({'message': 'Usuario no encontrado'}), 404
 
-    correo_electronico = result[0][3]  # Obtener el correo electrónico actual del usuario
-    app.logger.info(f"Correo electrónico actual del usuario: {correo_electronico}")
+    usuario_actual = result[0]
+    app.logger.info(f"Usuario actual: {usuario_actual}")
 
-    app.logger.info(f"Ejecutando procedimiento de actualización con datos: {data}")
+    # Si no se está actualizando la contraseña, obtenemos la contraseña actual del usuario
+    password_hash = data.get('PasswordHash', usuario_actual['PasswordHash'])
+
     try:
-        password_hash = data.get('PasswordHash')
-        if password_hash:
-            password_hash = generate_password_hash(password_hash)
-        else:
-            # Si no se está actualizando la contraseña, obtenemos la contraseña actual del usuario
-            password_hash = result[0][6] 
         update_data = [
             id,
-            data['Nombre'],
-            data['Apellido'],
-            data.get('Telefono', ''),
-            data.get('ImagenPerfil', ''),
+            data.get('Nombre', usuario_actual['Nombre']),
+            data.get('Apellido', usuario_actual['Apellido']),
+            data.get('Telefono', usuario_actual['Telefono']),
+            data.get('ImagenPerfil', usuario_actual['ImagenPerfil']),
             password_hash
         ]
         app.logger.info(f"Datos enviados al procedimiento almacenado ActualizarUsuario: {update_data}")
@@ -241,6 +236,7 @@ def update_usuario(current_user, id):
     except Exception as e:
         app.logger.error(f"Error al actualizar usuario: {str(e)}")
         return jsonify({'message': 'Error al actualizar usuario'}), 500
+
       
 @usuarios_bp.route('/usuarios/<int:id>', methods=['DELETE'])
 @token_required
@@ -301,7 +297,26 @@ def delete_usuario(current_user, id):
         app.logger.error(f"Error al eliminar usuario: {str(e)}")
         return jsonify({'message': 'Error al eliminar usuario'}), 500
 
-
+@usuarios_bp.route('/usuarios/conectados', methods=['GET'])
+@token_required
+def get_connected_users(current_user):
+    """
+    Obtener todos los usuarios y su estado de conexión.
+    ---
+    tags:
+      - usuarios
+    responses:
+      200:
+        description: Devuelve un listado de todos los usuarios y su estado de conexión.
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Usuario'
+    """
+    usuarios = call_procedure('ObtenerUsuariosConectados', [])
+    return jsonify({'usuarios': usuario_schema.dump(usuarios)}), 200
 
 @usuarios_bp.route('/usuarios/<int:id>/imagen', methods=['POST'])
 @token_required

@@ -137,6 +137,10 @@ def create_tarea(current_user):
     app.logger.info(f"User creating task: {current_user.UsuarioID}")
     app.logger.info(f"Data received: {data}")
 
+    # Verifica si el ProyectoID está en los datos recibidos
+    if 'ProyectoID' not in data or data['ProyectoID'] is None:
+        return jsonify({'ProyectoID': ['Field may not be null.']}), 400
+
     errors = tarea_schema.validate(data)
     if errors:
         app.logger.error(f"Validation errors: {errors}")
@@ -152,21 +156,58 @@ def create_tarea(current_user):
             data.get('FechaVencimiento', None)
         ])
         app.logger.info(f"Result from CrearTarea: {result}")
-        new_task_id = result[0][0]
-        new_task = {
-            'id': new_task_id,
-            'ProyectoID': data['ProyectoID'],
-            'Titulo': data['Titulo'],
-            'Descripcion': data.get('Descripcion', ''),
-            'Importancia': data.get('Importancia', 1),
-            'Estado': data.get('Estado', 'pendiente'),
-            'FechaVencimiento': data.get('FechaVencimiento', None)
-        }
-        socketio.emit('new_task', {'task': new_task}, namespace='/')
-        return jsonify({'message': 'Task created successfully', 'task': new_task}), 201
+        
+        if result and result[0] and 'id' in result[0]:
+            new_task_id = result[0]['id']
+            new_task = {
+                'id': new_task_id,
+                'ProyectoID': data['ProyectoID'],
+                'Titulo': data['Titulo'],
+                'Descripcion': data.get('Descripcion', ''),
+                'Importancia': data.get('Importancia', 1),
+                'Estado': data.get('Estado', 'pendiente'),
+                'FechaVencimiento': data.get('FechaVencimiento', None)
+            }
+            socketio.emit('new_task', {'task': new_task}, namespace='/')
+            return jsonify({'message': 'Task created successfully', 'task': new_task}), 201
+        else:
+            app.logger.error(f"Error creating task: Invalid result from procedure {result}")
+            return jsonify({'message': 'Error creating task'}), 500
     except Exception as e:
-        app.logger.error(f"Error creating task: {e}")
+        app.logger.error(f"Exception: {e}")
         return jsonify({'message': 'Internal server error'}), 500
+      
+@tareas_bp.route('/boards/<int:id>', methods=['GET'])
+@token_required
+def get_board(current_user, id):
+    """
+    Get a board by ID
+    ---
+    tags:
+      - boards
+    parameters:
+      - in: path
+        name: id
+        type: integer
+        required: true
+        description: ID of the board
+    responses:
+      200:
+        description: Board details
+        schema:
+          $ref: '#/definitions/Board'
+      404:
+        description: Board not found
+    """
+    try:
+        result = call_procedure('ObtenerTableroPorID', [id])
+        if not result or not result[0]:
+            return jsonify({'message': 'Board not found'}), 404
+
+        board = result[0]
+        return jsonify(board), 200
+    except Exception as e:
+        return jsonify({'message': 'Internal server error', 'error': str(e)}), 500
 
 @tareas_bp.route('/tareas/<int:id>', methods=['PUT'])
 @token_required
@@ -218,7 +259,6 @@ def update_tarea(current_user, id):
     data.pop('columnId', None)
     data.pop('message', None)
 
-    # Validar datos
     try:
         tarea_data = tarea_schema.load(data, partial=True)
         tarea_data_dict = tarea_schema.dump(tarea_data)
@@ -227,50 +267,37 @@ def update_tarea(current_user, id):
         app.logger.error(f"Errores de validación: {err.messages}")
         return jsonify(err.messages), 400
 
-    try:
-        tarea_id = int(id)
-    except ValueError:
-        app.logger.error(f"ID de tarea inválido: {id}")
-        return jsonify({'message': 'Invalid task ID'}), 400
-
-    result = call_procedure('ObtenerTareaPorID', [tarea_id])
+    result = call_procedure('ObtenerTareaPorID', [id])
     if not result or not result[0]:
         app.logger.error(f"Tarea no encontrada o datos incompletos para la tarea: {result}")
         return jsonify({'message': TASK_NOT_FOUND}), 404
 
     tarea_actual = result[0]
     app.logger.info(f"Tarea actual obtenida: {tarea_actual}")
-    
-    tarea_data_dict['ProyectoID'] = tarea_data_dict.get('ProyectoID', tarea_actual[1])
-    tarea_data_dict['Titulo'] = tarea_data_dict.get('Titulo', tarea_actual[2])
-    tarea_data_dict['Descripcion'] = tarea_data_dict.get('Descripcion', tarea_actual[3])
-    tarea_data_dict['Importancia'] = tarea_data_dict.get('Importancia', tarea_actual[4])
-    tarea_data_dict['Estado'] = tarea_data_dict.get('Estado', tarea_actual[5])
-    tarea_data_dict['FechaVencimiento'] = tarea_data_dict.get('FechaVencimiento', tarea_actual[6])
 
-    if tarea_data_dict['ProyectoID'] is None:
-        tarea_data_dict['ProyectoID'] = tarea_actual[1]
-    if tarea_data_dict['Titulo'] is None:
-        tarea_data_dict['Titulo'] = tarea_actual[2]
-    if tarea_data_dict['Descripcion'] is None:
-        tarea_data_dict['Descripcion'] = tarea_actual[3]
-    if tarea_data_dict['Importancia'] is None:
-        tarea_data_dict['Importancia'] = tarea_actual[4]
-    if tarea_data_dict['Estado'] is None:
-        tarea_data_dict['Estado'] = tarea_actual[5]
-    if tarea_data_dict['FechaVencimiento'] is None:
-        tarea_data_dict['FechaVencimiento'] = tarea_actual[6]
+    tarea_data_dict['ProyectoID'] = tarea_data_dict.get('ProyectoID', tarea_actual['ProyectoID'])
+    tarea_data_dict['Titulo'] = tarea_data_dict.get('Titulo', tarea_actual['Titulo'])
+    tarea_data_dict['Descripcion'] = tarea_data_dict.get('Descripcion', tarea_actual['Descripcion'])
+    tarea_data_dict['Importancia'] = tarea_data_dict.get('Importancia', tarea_actual['Importancia'])
+    tarea_data_dict['Estado'] = tarea_data_dict.get('Estado', tarea_actual['Estado'])
+    tarea_data_dict['FechaVencimiento'] = tarea_data_dict.get('FechaVencimiento', tarea_actual['FechaVencimiento'])
 
     if isinstance(tarea_data_dict['Importancia'], str):
         try:
             tarea_data_dict['Importancia'] = int(tarea_data_dict['Importancia'])
         except ValueError:
-            tarea_data_dict['Importancia'] = 1 
+            tarea_data_dict['Importancia'] = 1
 
-    # Actualizar tarea
+    if not tarea_data_dict['Titulo']:
+        tarea_data_dict['Titulo'] = tarea_actual['Titulo']
+    if not tarea_data_dict['Descripcion']:
+        tarea_data_dict['Descripcion'] = tarea_actual['Descripcion']
+    if not tarea_data_dict['ProyectoID']:
+        tarea_data_dict['ProyectoID'] = tarea_actual['ProyectoID']
+
     try:
         call_procedure('ActualizarTarea', [
-            tarea_id,
+            id,
             tarea_data_dict['ProyectoID'],
             tarea_data_dict['Titulo'],
             tarea_data_dict['Descripcion'],
@@ -278,7 +305,7 @@ def update_tarea(current_user, id):
             tarea_data_dict['Estado'],
             tarea_data_dict['FechaVencimiento']
         ])
-        app.logger.info(f"Tarea actualizada correctamente: {tarea_id}")
+        app.logger.info(f"Tarea actualizada correctamente: {id}")
     except Exception as e:
         app.logger.error(f"Error al actualizar la tarea: {e}")
         return jsonify({'message': 'Internal server error'}), 500

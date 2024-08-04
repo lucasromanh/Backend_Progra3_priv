@@ -135,6 +135,41 @@ def update_board(id):
         return jsonify({'message': 'Tablero no encontrado'}), 404
     call_procedure('ActualizarTablero', [id, titulo])
     return jsonify({'message': 'Tablero actualizado exitosamente'}), 200
+  
+@boards_bp.route('/boards/usuarios', methods=['POST'])
+@token_required
+def add_user_to_board(current_user):
+    """
+    Agregar un usuario a un tablero.
+    ---
+    tags:
+      - boards
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              BoardID:
+                type: integer
+                description: ID del tablero.
+              UsuarioID:
+                type: integer
+                description: ID del usuario a agregar.
+    responses:
+      201:
+        description: Usuario agregado exitosamente.
+      400:
+        description: Entrada inválida.
+    """
+    data = request.get_json()
+    board_id = data.get('BoardID')
+    usuario_id = data.get('UsuarioID')
+    if not board_id or not usuario_id:
+        return jsonify({'message': 'Datos insuficientes para agregar usuario a tablero'}), 400
+    call_procedure('AgregarUsuarioATablero', [board_id, usuario_id])
+    return jsonify({'message': 'Usuario agregado exitosamente'}), 201
 
 @boards_bp.route('/boards/<int:id>', methods=['DELETE'])
 @token_required
